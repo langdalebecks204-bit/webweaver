@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, require_admin
 from app.inspector.engine import run_inspection
+from app.inspector.scheduler import collect_all_targets
 from app.models import Device
 from app.schemas import DeviceCreate, DeviceUpdate
 from app.services.device_service import (
@@ -44,6 +45,16 @@ def list_devices(
 @router.get("/tree")
 def get_tree(db: Session = Depends(get_db), _: object = Depends(get_current_user)):
     return build_tree(db)
+
+
+@router.post("/recheck-all")
+async def recheck_all_devices(
+    db: Session = Depends(get_db),
+    _: object = Depends(get_current_user),
+):
+    targets = collect_all_targets(db)
+    results = await run_inspection(db, targets)
+    return {"checked": results}
 
 
 @router.get("/{device_id}")

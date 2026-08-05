@@ -120,3 +120,41 @@ def test_recheck_single_device(client, admin_headers, monkeypatch):
     got = client.get(f"/api/devices/{cid}", headers=admin_headers).json()
     assert got["status"] == "online"
     assert got["latency_ms"] == 7
+
+
+def test_recheck_all_devices(client, admin_headers, monkeypatch):
+    from app.inspector.engine import ProbeResult
+
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+        return ProbeResult(status="online", latency_ms=5)
+
+    monkeypatch.setattr("app.inspector.engine.probe_device", fake_probe)
+
+    root = client.post("/api/devices", headers=admin_headers,
+                       json={"name": "root", "type": "group"}).json()
+    client.post("/api/devices", headers=admin_headers,
+                json={"name": "sw1", "type": "switch", "ip_address": "10.0.0.1", "parent_id": root["id"]})
+    client.post("/api/devices", headers=admin_headers,
+                json={"name": "sw2", "type": "switch", "ip_address": "10.0.0.2", "parent_id": root["id"]})
+    client.post("/api/devices", headers=admin_headers,
+                json={"name": "noip", "type": "switch", "parent_id": root["id"]})
+    client.post("/api/devices", headers=admin_headers,
+                json={"name": "grp", "type": "group", "parent_id": root["id"]})
+
+    r = client.post("/api/devices/recheck-all", headers=admin_headers)
+    assert r.status_code == 200
+    checked = r.json()["checked"]
+    assert len(checked) == 2
+    assert all(c["status"] == "online" for c in checked)
+
+
+def test_recheck_all_viewer_allowed(client):
+    _mk_viewer()
+    vh = _login(client, "viewer1", "viewpass")
+    r = client.post("/api/devices/recheck-all", headers=vh)
+    assert r.status_code == 200
+    assert r.json() == {"checked": []}
+
+
+def test_recheck_all_requires_auth(client):
+    assert client.post("/api/devices/recheck-all").status_code == 401
