@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
 import { useDevicesStore } from '../stores/devices'
 import DeviceTree from '../components/DeviceTree.vue'
@@ -18,6 +19,21 @@ function onLogout() {
   auth.logout()
   router.push('/login')
 }
+
+async function onCreateRoot() {
+  try {
+    const { value } = await ElMessageBox.prompt('请输入分组名称', '新增根分组', {
+      confirmButtonText: '创建',
+      cancelButtonText: '取消',
+      inputPattern: /\S+/,
+      inputErrorMessage: '分组名称不能为空',
+    })
+    await store.create({ name: value, type: 'group' })
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(error.response?.data?.detail || '创建失败')
+  }
+}
 </script>
 
 <template>
@@ -31,7 +47,7 @@ function onLogout() {
       <el-card>
         <template #header>
           <div class="toolbar">
-            <el-button type="primary" @click="store.create({ name: '新建分组', type: 'group' })">
+            <el-button type="primary" @click="onCreateRoot">
               新增根分组
             </el-button>
             <el-button @click="store.load()">刷新</el-button>

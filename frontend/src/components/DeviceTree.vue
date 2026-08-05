@@ -33,13 +33,17 @@ async function submit() {
     ip_address: form.value.ip_address || null,
     port: form.value.port || null,
   }
-  if (editing.value) {
-    await store.update(editing.value.id, payload)
-  } else {
-    await store.create(payload)
+  try {
+    if (editing.value) {
+      await store.update(editing.value.id, payload)
+    } else {
+      await store.create(payload)
+    }
+    dialogVisible.value = false
+    ElMessage.success('已保存')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || '保存失败')
   }
-  dialogVisible.value = false
-  ElMessage.success('已保存')
 }
 
 async function remove() {
