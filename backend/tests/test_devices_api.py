@@ -98,3 +98,25 @@ def test_viewer_forbidden_from_write(client, admin_headers):
     assert client.post("/api/devices", headers=vh,
                        json={"name": "x", "type": "group"}).status_code == 403
     assert client.delete("/api/devices/9999", headers=vh).status_code == 403
+
+
+def test_recheck_single_device(client, admin_headers, monkeypatch):
+    from app.inspector.engine import ProbeResult
+
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+        return ProbeResult(status="online", latency_ms=7)
+
+    monkeypatch.setattr("app.inspector.engine.probe_device", fake_probe)
+
+    created = client.post(
+        "/api/devices", headers=admin_headers,
+        json={"name": "SW", "type": "switch", "ip_address": "10.0.0.1", "port": 22},
+    )
+    cid = created.json()["id"]
+    r = client.post(f"/api/devices/{cid}/recheck", headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json()["checked"][0]["status"] == "online"
+
+    got = client.get(f"/api/devices/{cid}", headers=admin_headers).json()
+    assert got["status"] == "online"
+    assert got["latency_ms"] == 7

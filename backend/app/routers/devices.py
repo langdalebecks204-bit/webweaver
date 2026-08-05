@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user, require_admin
+from app.inspector.engine import run_inspection
 from app.models import Device
 from app.schemas import DeviceCreate, DeviceUpdate
 from app.services.device_service import (
@@ -11,6 +12,7 @@ from app.services.device_service import (
     create_device as create_device_service,
     delete_device as delete_device_service,
     device_to_dict,
+    get_descendant_ids,
     update_device as update_device_service,
 )
 
@@ -91,3 +93,24 @@ def delete_device(
     _get_or_404(db, device_id)
     deleted = delete_device_service(db, device_id)
     return {"deleted": deleted}
+
+
+@router.post("/{device_id}/recheck")
+async def recheck_device(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: object = Depends(get_current_user),
+):
+    _get_or_404(db, device_id)
+    ids = get_descendant_ids(db, device_id)
+    targets = list(
+        db.scalars(
+            select(Device).where(
+                Device.id.in_(ids),
+                Device.ip_address.is_not(None),
+                Device.type != "group",
+            )
+        )
+    )
+    results = await run_inspection(db, targets)
+    return {"checked": results}
