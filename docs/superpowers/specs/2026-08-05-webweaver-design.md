@@ -109,7 +109,7 @@ WebWeaver/
 |---|---|
 | unknown | 尚未巡检（或检测无法判定） |
 | online | Ping 成功；若配置了 port，则 TCP 端口也连通 |
-| warning | Ping 成功，但配置了 port 且 TCP 端口探测失败（或时延超阈值） |
+| warning | Ping 成功，但配置了 port 且 TCP 端口探测失败 |
 | offline | Ping 超时 / 不可达 / ICMP 错误 |
 
 ## 4. 巡检引擎
