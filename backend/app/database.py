@@ -32,7 +32,7 @@ def get_db():
 
 
 def init_db() -> None:
-    from app.models import Device, User  # noqa: F401
+    from app.models import Device, Setting, User  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     seed_default_admin()

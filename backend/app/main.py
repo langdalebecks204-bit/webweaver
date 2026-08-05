@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from app.config import settings
 from app.database import init_db
 from app.routers import auth, devices, users
+from app.routers import settings as settings_router
 
 
 @asynccontextmanager
@@ -25,6 +26,7 @@ app = FastAPI(title="织网 WebWeaver", version="0.1.0", lifespan=lifespan)
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(devices.router, prefix="/api/devices", tags=["devices"])
+app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
 
 
 @app.get("/api/health")

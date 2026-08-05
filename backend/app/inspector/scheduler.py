@@ -5,6 +5,15 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import Device
 
+_scheduler: AsyncIOScheduler | None = None
+
+
+def reschedule_interval(minutes: int) -> None:
+    if _scheduler is not None:
+        from apscheduler.triggers.interval import IntervalTrigger
+
+        _scheduler.reschedule_job("inspection", trigger=IntervalTrigger(minutes=minutes))
+
 
 async def scheduled_inspection() -> None:
     from app.inspector.engine import run_inspection
