@@ -29,3 +29,27 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def init_db() -> None:
+    from app.models import Device, User  # noqa: F401
+
+    Base.metadata.create_all(bind=engine)
+    seed_default_admin()
+
+
+def seed_default_admin() -> None:
+    from app.models import User
+    from app.security import hash_password
+
+    with SessionLocal() as db:
+        exists = db.query(User).filter(User.username == settings.default_admin).first()
+        if exists is None:
+            db.add(
+                User(
+                    username=settings.default_admin,
+                    password_hash=hash_password(settings.default_admin_password),
+                    role="admin",
+                )
+            )
+            db.commit()
