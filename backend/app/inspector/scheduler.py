@@ -11,7 +11,7 @@ _scheduler: AsyncIOScheduler | None = None
 def collect_all_targets(db) -> list[Device]:
     return list(
         db.scalars(
-            select(Device).where(Device.ip_address.is_not(None), Device.type != "group")
+            select(Device).where(Device.ip_address.is_not(None))
         )
     )
 

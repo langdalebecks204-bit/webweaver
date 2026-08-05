@@ -158,3 +158,20 @@ def test_recheck_all_viewer_allowed(client):
 
 def test_recheck_all_requires_auth(client):
     assert client.post("/api/devices/recheck-all").status_code == 401
+
+
+def test_recheck_group_with_ip(client, admin_headers, monkeypatch):
+    from app.inspector.engine import ProbeResult
+
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+        return ProbeResult(status="online", latency_ms=3)
+
+    monkeypatch.setattr("app.inspector.engine.probe_device", fake_probe)
+
+    created = client.post(
+        "/api/devices", headers=admin_headers,
+        json={"name": "g", "type": "group", "ip_address": "10.0.0.9"},
+    ).json()
+    r = client.post(f"/api/devices/{created['id']}/recheck", headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json()["checked"][0]["status"] == "online"

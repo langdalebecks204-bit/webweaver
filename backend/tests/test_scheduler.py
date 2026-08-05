@@ -69,4 +69,4 @@ def test_collect_all_targets_filters():
 
     with SessionLocal() as db:
         names = sorted(d.name for d in collect_all_targets(db))
-        assert names == ["sw1", "sw2"]
+        assert names == ["sub", "sw1", "sw2"]

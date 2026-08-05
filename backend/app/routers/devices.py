@@ -119,7 +119,6 @@ async def recheck_device(
             select(Device).where(
                 Device.id.in_(ids),
                 Device.ip_address.is_not(None),
-                Device.type != "group",
             )
         )
     )
