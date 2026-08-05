@@ -5,22 +5,30 @@ import { mount, flushPromises } from '@vue/test-utils'
 const {
   createMock,
   loadMock,
+  recheckAllMock,
   loadMeMock,
   logoutMock,
   pushMock,
   promptMock,
   successMock,
   errorMock,
+  loadIntervalMock,
+  saveIntervalMock,
 } = vi.hoisted(() => ({
   createMock: vi.fn(),
   loadMock: vi.fn(),
+  recheckAllMock: vi.fn(),
   loadMeMock: vi.fn(),
   logoutMock: vi.fn(),
   pushMock: vi.fn(),
   promptMock: vi.fn(),
   successMock: vi.fn(),
   errorMock: vi.fn(),
+  loadIntervalMock: vi.fn(),
+  saveIntervalMock: vi.fn(),
 }))
+
+const authState = vi.hoisted(() => ({ role: 'admin' }))
 
 vi.mock('element-plus', () => ({
   ElMessage: { success: successMock, error: errorMock },
@@ -33,14 +41,23 @@ vi.mock('../../stores/devices', () => ({
     stats: { online: 0, offline: 0, warning: 0, unknown: 0 },
     load: loadMock,
     create: createMock,
+    recheckAll: recheckAllMock,
   }),
 }))
 
 vi.mock('../../stores/auth', () => ({
   useAuthStore: () => ({
-    user: { username: 'admin', role: 'admin' },
+    user: { username: 'admin', role: authState.role },
     loadMe: loadMeMock,
     logout: logoutMock,
+  }),
+}))
+
+vi.mock('../../stores/settings', () => ({
+  useSettingsStore: () => ({
+    pollIntervalMinutes: 5,
+    loadInterval: loadIntervalMock,
+    saveInterval: saveIntervalMock,
   }),
 }))
 
@@ -61,6 +78,12 @@ function mountView() {
         'el-card': { template: '<div><slot name="header" /><slot /></div>' },
         'el-tag': { template: '<span><slot /></span>' },
         'el-tree': { template: '<div><slot /></div>' },
+        'el-input-number': {
+          props: ['modelValue'],
+          emits: ['update:modelValue'],
+          template:
+            '<input class="interval-input" :value="modelValue" @input="$emit(\'update:modelValue\', Number($event.target.value))" />',
+        },
         'el-button': {
           emits: ['click'],
           template: '<button @click="$emit(\'click\')"><slot /></button>',
@@ -70,8 +93,8 @@ function mountView() {
   })
 }
 
-function rootButton(wrapper) {
-  return wrapper.findAll('button').find((b) => b.text() === '新增根分组')
+function buttonByText(wrapper, text) {
+  return wrapper.findAll('button').find((b) => b.text() === text)
 }
 
 describe('MainView 新增根分组', () => {
@@ -83,7 +106,7 @@ describe('MainView 新增根分组', () => {
   it('点击后弹窗询问分组名，并以输入名称创建', async () => {
     const wrapper = mountView()
     await flushPromises()
-    await rootButton(wrapper).trigger('click')
+    await buttonByText(wrapper, '新增根分组').trigger('click')
     expect(promptMock).toHaveBeenCalled()
     await flushPromises()
     expect(createMock).toHaveBeenCalledWith({ name: '研发部', type: 'group' })
@@ -93,7 +116,7 @@ describe('MainView 新增根分组', () => {
     createMock.mockRejectedValue({ response: { data: { detail: '已存在同名节点' } } })
     const wrapper = mountView()
     await flushPromises()
-    await rootButton(wrapper).trigger('click')
+    await buttonByText(wrapper, '新增根分组').trigger('click')
     await flushPromises()
     expect(errorMock).toHaveBeenCalledWith('已存在同名节点')
   })
@@ -125,5 +148,60 @@ describe('MainView 自动刷新', () => {
     await vi.advanceTimersByTimeAsync(90000)
     await flushPromises()
     expect(loadMock).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('MainView 立即巡检全部', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('点击按钮调用 store.recheckAll', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await buttonByText(wrapper, '立即巡检全部').trigger('click')
+    await flushPromises()
+    expect(recheckAllMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('巡检全部失败时提示错误', async () => {
+    recheckAllMock.mockRejectedValue({ response: { data: { detail: '巡检失败' } } })
+    const wrapper = mountView()
+    await flushPromises()
+    await buttonByText(wrapper, '立即巡检全部').trigger('click')
+    await flushPromises()
+    expect(errorMock).toHaveBeenCalledWith('巡检失败')
+  })
+})
+
+describe('MainView 巡检间隔设置', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('挂载后 admin 加载当前间隔', async () => {
+    authState.role = 'admin'
+    mountView()
+    await flushPromises()
+    expect(loadIntervalMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('保存间隔调用 saveInterval 并提示成功', async () => {
+    authState.role = 'admin'
+    saveIntervalMock.mockResolvedValue({})
+    const wrapper = mountView()
+    await flushPromises()
+    await buttonByText(wrapper, '保存间隔').trigger('click')
+    await flushPromises()
+    expect(saveIntervalMock).toHaveBeenCalledWith(5)
+    expect(successMock).toHaveBeenCalledWith('已保存')
+  })
+
+  it('viewer 不显示间隔设置控件，也不加载间隔', async () => {
+    authState.role = 'viewer'
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('保存间隔')
+    expect(loadIntervalMock).not.toHaveBeenCalled()
   })
 })

@@ -4,17 +4,22 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
 import { useDevicesStore } from '../stores/devices'
+import { useSettingsStore } from '../stores/settings'
 import DeviceTree from '../components/DeviceTree.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
 const store = useDevicesStore()
+const settings = useSettingsStore()
 
 let refreshTimer
 
 onMounted(async () => {
   await auth.loadMe()
   await store.load()
+  if (auth.user?.role === 'admin') {
+    await settings.loadInterval()
+  }
   refreshTimer = setInterval(() => store.load(), 30000)
 })
 
@@ -41,6 +46,23 @@ async function onCreateRoot() {
     ElMessage.error(error.response?.data?.detail || '创建失败')
   }
 }
+
+async function onRecheckAll() {
+  try {
+    await store.recheckAll()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || '巡检失败')
+  }
+}
+
+async function onSaveInterval() {
+  try {
+    await settings.saveInterval(settings.pollIntervalMinutes)
+    ElMessage.success('已保存')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || '保存失败')
+  }
+}
 </script>
 
 <template>
@@ -58,6 +80,16 @@ async function onCreateRoot() {
               新增根分组
             </el-button>
             <el-button @click="store.load()">刷新</el-button>
+            <el-button type="success" @click="onRecheckAll">立即巡检全部</el-button>
+            <div v-if="auth.user?.role === 'admin'" class="interval-setting">
+              <el-input-number
+                v-model="settings.pollIntervalMinutes"
+                :min="1"
+                :max="1440"
+                size="small"
+              />
+              <el-button size="small" @click="onSaveInterval">保存间隔</el-button>
+            </div>
             <div class="stats">
               <el-tag type="success">在线 {{ store.stats.online }}</el-tag>
               <el-tag type="warning">警告 {{ store.stats.warning }}</el-tag>
@@ -109,6 +141,11 @@ async function onCreateRoot() {
 .stats {
   margin-left: auto;
   display: flex;
+  gap: 8px;
+}
+.interval-setting {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 </style>
