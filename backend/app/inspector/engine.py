@@ -10,8 +10,9 @@ except ImportError:
         return await asyncio.to_thread(ping3.ping, host, timeout=timeout, unit=unit)
 
 from app.config import settings
-from app.models import Device, utcnow
+from app.models import Device, ExternalTarget, utcnow
 from app.services.device_service import device_to_dict
+from app.services.external_service import external_target_to_dict
 
 
 @dataclass
@@ -69,5 +70,51 @@ async def run_inspection(db, devices: list[Device]) -> list[dict]:
         return device_to_dict(device)
 
     results = await asyncio.gather(*(check_one(d) for d in devices))
+    db.commit()
+    return list(results)
+
+
+async def resolve_domain(domain: str) -> str | None:
+    loop = asyncio.get_running_loop()
+    try:
+        infos = await asyncio.wait_for(
+            loop.getaddrinfo(domain, None), timeout=settings.ping_timeout
+        )
+    except Exception:
+        return None
+    for info in infos:
+        ip = info[4][0] if info[4] else None
+        if ip:
+            return ip
+    return None
+
+
+async def run_external_inspection(db, targets: list[ExternalTarget]) -> list[dict]:
+    semaphore = asyncio.Semaphore(settings.ping_concurrency)
+
+    async def check_one(target: ExternalTarget) -> dict:
+        async with semaphore:
+            if target.ip_address:
+                result = await probe_device(
+                    target.ip_address, target.port, settings.ping_timeout, settings.tcp_timeout
+                )
+                target.ip_status = result.status
+                target.ip_latency_ms = result.latency_ms
+                target.ip_last_check = utcnow()
+            if target.domain:
+                ip = await resolve_domain(target.domain)
+                if ip is None:
+                    target.domain_status = "offline"
+                    target.domain_latency_ms = None
+                else:
+                    result = await probe_device(
+                        ip, target.port, settings.ping_timeout, settings.tcp_timeout
+                    )
+                    target.domain_status = result.status
+                    target.domain_latency_ms = result.latency_ms
+                target.domain_last_check = utcnow()
+        return external_target_to_dict(target)
+
+    results = await asyncio.gather(*(check_one(t) for t in targets))
     db.commit()
     return list(results)
