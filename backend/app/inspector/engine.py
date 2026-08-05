@@ -1,4 +1,5 @@
 import asyncio
+import socket
 from dataclasses import dataclass
 
 try:
@@ -82,11 +83,16 @@ async def resolve_domain(domain: str) -> str | None:
         )
     except Exception:
         return None
+    fallback = None
     for info in infos:
         ip = info[4][0] if info[4] else None
-        if ip:
+        if not ip:
+            continue
+        if info[0] == socket.AF_INET:
             return ip
-    return None
+        if fallback is None:
+            fallback = ip
+    return fallback
 
 
 async def run_external_inspection(db, targets: list[ExternalTarget]) -> list[dict]:

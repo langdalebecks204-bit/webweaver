@@ -124,3 +124,34 @@ async def test_run_external_inspection_domain_offline_on_resolve_fail(monkeypatc
     assert results[0]["domain_status"] == "offline"
     assert results[0]["domain_latency_ms"] is None
     assert target.domain_last_check is not None
+
+
+async def test_resolve_domain_prefers_ipv4(monkeypatch):
+    import socket
+
+    from app.inspector.engine import resolve_domain
+
+    class FakeLoop:
+        async def getaddrinfo(self, host, port):
+            return [
+                (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("240e:ff::1", 0)),
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("183.60.227.35", 0)),
+            ]
+
+    monkeypatch.setattr("asyncio.get_running_loop", lambda: FakeLoop())
+    assert await resolve_domain("www.163.com") == "183.60.227.35"
+
+
+async def test_resolve_domain_falls_back_to_any_family(monkeypatch):
+    import socket
+
+    from app.inspector.engine import resolve_domain
+
+    class FakeLoop:
+        async def getaddrinfo(self, host, port):
+            return [
+                (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("240e:ff::1", 0)),
+            ]
+
+    monkeypatch.setattr("asyncio.get_running_loop", lambda: FakeLoop())
+    assert await resolve_domain("ipv6-only.example") == "240e:ff::1"
