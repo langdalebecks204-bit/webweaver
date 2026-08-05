@@ -46,3 +46,23 @@ class Setting(Base):
 
     key: Mapped[str] = mapped_column(String(50), primary_key=True)
     value: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
+class ExternalTarget(Base):
+    __tablename__ = "external_targets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ip_status: Mapped[str] = mapped_column(String(10), nullable=False, default="unknown")
+    ip_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ip_last_check: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    domain_status: Mapped[str] = mapped_column(String(10), nullable=False, default="unknown")
+    domain_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    domain_last_check: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )

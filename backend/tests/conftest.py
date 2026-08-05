@@ -18,7 +18,7 @@ def clean_db():
     from app.database import Base, SessionLocal, engine
 
     try:
-        from app.models import Device, Setting, User
+        from app.models import Device, ExternalTarget, Setting, User
     except ImportError:
         yield
         return
@@ -27,12 +27,14 @@ def clean_db():
 
     with SessionLocal() as db:
         db.query(Device).delete()
+        db.query(ExternalTarget).delete()
         db.query(Setting).delete()
         db.query(User).delete()
         db.commit()
     yield
     with SessionLocal() as db:
         db.query(Device).delete()
+        db.query(ExternalTarget).delete()
         db.query(Setting).delete()
         db.query(User).delete()
         db.commit()

@@ -55,3 +55,35 @@ class DeviceOut(DeviceBase):
 
 
 DeviceOut.model_rebuild()
+
+
+class ExternalTargetCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    ip_address: str | None = None
+    domain: str | None = None
+    port: int | None = Field(default=None, ge=1, le=65535)
+
+
+class ExternalTargetUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    ip_address: str | None = None
+    domain: str | None = None
+    port: int | None = Field(default=None, ge=1, le=65535)
+
+
+class ExternalTargetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    ip_address: str | None
+    domain: str | None
+    port: int | None
+    ip_status: str
+    ip_latency_ms: int | None
+    ip_last_check: datetime | None
+    domain_status: str
+    domain_latency_ms: int | None
+    domain_last_check: datetime | None
+    created_at: datetime
+    updated_at: datetime
