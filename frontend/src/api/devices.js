@@ -23,3 +23,7 @@ export function deleteDevice(id) {
 export function recheckDevice(id) {
   return client.post(`/devices/${id}/recheck`)
 }
+
+export function recheckAllDevices() {
+  return client.post('/devices/recheck-all')
+}

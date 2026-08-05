@@ -3,6 +3,7 @@ import {
   createDevice,
   deleteDevice,
   fetchTree,
+  recheckAllDevices,
   recheckDevice,
   updateDevice,
 } from '../api/devices'
@@ -53,6 +54,10 @@ export const useDevicesStore = defineStore('devices', {
     },
     async recheck(id) {
       await recheckDevice(id)
+      await this.load()
+    },
+    async recheckAll() {
+      await recheckAllDevices()
       await this.load()
     },
     applyStatus(nodeId, status, latencyMs, lastCheck) {
