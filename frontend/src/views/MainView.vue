@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
@@ -10,9 +10,16 @@ const router = useRouter()
 const auth = useAuthStore()
 const store = useDevicesStore()
 
+let refreshTimer
+
 onMounted(async () => {
   await auth.loadMe()
   await store.load()
+  refreshTimer = setInterval(() => store.load(), 30000)
+})
+
+onUnmounted(() => {
+  clearInterval(refreshTimer)
 })
 
 function onLogout() {

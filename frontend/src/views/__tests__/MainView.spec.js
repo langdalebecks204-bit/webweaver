@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 const {
@@ -96,5 +96,34 @@ describe('MainView 新增根分组', () => {
     await rootButton(wrapper).trigger('click')
     await flushPromises()
     expect(errorMock).toHaveBeenCalledWith('已存在同名节点')
+  })
+})
+
+describe('MainView 自动刷新', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('挂载后每 30 秒自动调用 store.load()，卸载后停止', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    expect(loadMock).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(30000)
+    await flushPromises()
+    expect(loadMock).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(30000)
+    await flushPromises()
+    expect(loadMock).toHaveBeenCalledTimes(3)
+
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(90000)
+    await flushPromises()
+    expect(loadMock).toHaveBeenCalledTimes(3)
   })
 })
