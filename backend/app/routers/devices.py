@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user, require_admin
-from app.inspector.engine import run_inspection
-from app.inspector.scheduler import collect_all_targets
+from app.inspector.engine import run_external_inspection, run_inspection
+from app.inspector.scheduler import collect_all_targets, collect_external_targets
 from app.models import Device
 from app.schemas import DeviceCreate, DeviceUpdate
 from app.services.device_service import (
@@ -54,7 +54,9 @@ async def recheck_all_devices(
 ):
     targets = collect_all_targets(db)
     results = await run_inspection(db, targets)
-    return {"checked": results}
+    external = collect_external_targets(db)
+    external_results = await run_external_inspection(db, external)
+    return {"checked": results, "external_checked": external_results}
 
 
 @router.get("/{device_id}")

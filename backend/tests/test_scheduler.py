@@ -70,3 +70,21 @@ def test_collect_all_targets_filters():
     with SessionLocal() as db:
         names = sorted(d.name for d in collect_all_targets(db))
         assert names == ["sub", "sw1", "sw2"]
+
+
+def test_collect_external_targets_returns_all():
+    from app.database import SessionLocal
+    from app.inspector.scheduler import collect_external_targets
+    from app.models import ExternalTarget
+
+    with SessionLocal() as db:
+        db.add_all(
+            [
+                ExternalTarget(name="t1", ip_address="8.8.8.8"),
+                ExternalTarget(name="t2", domain="example.com"),
+            ]
+        )
+        db.commit()
+
+    with SessionLocal() as db:
+        assert len(collect_external_targets(db)) == 2

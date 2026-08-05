@@ -2,7 +2,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 
 from app.database import SessionLocal
-from app.models import Device
+from app.models import Device, ExternalTarget
 from app.services.setting_service import get_poll_interval
 
 _scheduler: AsyncIOScheduler | None = None
@@ -16,13 +16,20 @@ def collect_all_targets(db) -> list[Device]:
     )
 
 
+def collect_external_targets(db) -> list[ExternalTarget]:
+    return list(db.scalars(select(ExternalTarget)))
+
+
 async def scheduled_inspection() -> None:
-    from app.inspector.engine import run_inspection
+    from app.inspector.engine import run_external_inspection, run_inspection
 
     with SessionLocal() as db:
         devices = collect_all_targets(db)
         if devices:
             await run_inspection(db, devices)
+        targets = collect_external_targets(db)
+        if targets:
+            await run_external_inspection(db, targets)
 
 
 def reschedule_interval(minutes: int) -> None:

@@ -140,12 +140,15 @@ def test_recheck_all_devices(client, admin_headers, monkeypatch):
                 json={"name": "noip", "type": "switch", "parent_id": root["id"]})
     client.post("/api/devices", headers=admin_headers,
                 json={"name": "grp", "type": "group", "parent_id": root["id"]})
+    client.post("/api/devices", headers=admin_headers,
+                json={"name": "grpip", "type": "group", "ip_address": "10.0.0.9", "parent_id": root["id"]})
 
     r = client.post("/api/devices/recheck-all", headers=admin_headers)
     assert r.status_code == 200
-    checked = r.json()["checked"]
-    assert len(checked) == 2
-    assert all(c["status"] == "online" for c in checked)
+    body = r.json()
+    assert len(body["checked"]) == 3
+    assert all(c["status"] == "online" for c in body["checked"])
+    assert body["external_checked"] == []
 
 
 def test_recheck_all_viewer_allowed(client):
@@ -153,11 +156,34 @@ def test_recheck_all_viewer_allowed(client):
     vh = _login(client, "viewer1", "viewpass")
     r = client.post("/api/devices/recheck-all", headers=vh)
     assert r.status_code == 200
-    assert r.json() == {"checked": []}
+    assert r.json() == {"checked": [], "external_checked": []}
 
 
 def test_recheck_all_requires_auth(client):
     assert client.post("/api/devices/recheck-all").status_code == 401
+
+
+def test_recheck_all_includes_external(client, admin_headers, monkeypatch):
+    from app.inspector.engine import ProbeResult
+
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+        return ProbeResult(status="online", latency_ms=6)
+
+    async def fake_resolve(domain):
+        return "8.8.8.8"
+
+    monkeypatch.setattr("app.inspector.engine.probe_device", fake_probe)
+    monkeypatch.setattr("app.inspector.engine.resolve_domain", fake_resolve)
+
+    client.post("/api/external", headers=admin_headers,
+                json={"name": "ext", "domain": "example.com"})
+
+    r = client.post("/api/devices/recheck-all", headers=admin_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["checked"] == []
+    assert len(body["external_checked"]) == 1
+    assert body["external_checked"][0]["domain_status"] == "online"
 
 
 def test_recheck_group_with_ip(client, admin_headers, monkeypatch):
