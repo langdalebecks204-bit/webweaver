@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDevicesStore } from '../stores/devices'
 
@@ -28,8 +28,14 @@ function openEdit() {
 }
 
 async function submit() {
+  const rawParentId = form.value.parent_id
+  const parentId =
+    rawParentId === '' || rawParentId === null || rawParentId === undefined
+      ? null
+      : Number(rawParentId)
   const payload = {
     ...form.value,
+    parent_id: parentId,
     ip_address: form.value.ip_address || null,
     port: form.value.port || null,
   }
@@ -67,6 +73,33 @@ function onCommand(command) {
   else if (command === 'delete') remove()
   else if (command === 'recheck') store.recheck(props.node.id)
 }
+
+function collectDescendantIds(node, acc) {
+  if (!node.children) return acc
+  for (const c of node.children) {
+    acc.add(c.id)
+    collectDescendantIds(c, acc)
+  }
+  return acc
+}
+
+const excludeIds = computed(() => {
+  const acc = new Set([props.node.id])
+  return collectDescendantIds(props.node, acc)
+})
+
+const parentCandidates = computed(() => {
+  const result = []
+  const walk = (nodes, depth) => {
+    for (const n of nodes) {
+      if (excludeIds.value.has(n.id)) continue
+      result.push({ id: n.id, name: n.name, depth })
+      if (n.children && n.children.length) walk(n.children, depth + 1)
+    }
+  }
+  walk(store.tree, 0)
+  return result
+})
 </script>
 
 <template>
@@ -107,6 +140,17 @@ function onCommand(command) {
           <el-option label="服务器" value="server" />
           <el-option label="交换机" value="switch" />
           <el-option label="终端" value="terminal" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="上级分组">
+        <el-select v-model="form.parent_id" clearable placeholder="根级" style="width: 100%">
+          <el-option
+            v-for="c in parentCandidates"
+            :key="c.id"
+            :value="c.id"
+          >
+            {{ '　'.repeat(c.depth) + c.name }}
+          </el-option>
         </el-select>
       </el-form-item>
       <el-form-item label="IP 地址">
