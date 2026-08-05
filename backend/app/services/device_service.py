@@ -63,11 +63,11 @@ def create_device(db: Session, data: DeviceCreate) -> Device:
         parent = db.get(Device, data.parent_id)
         if parent is None:
             raise ValueError("parent device not found")
-        dup = db.scalars(
-            select(Device).where(Device.parent_id == data.parent_id, Device.name == data.name)
-        ).first()
-        if dup is not None:
-            raise ValueError("device name already exists under this parent")
+    dup = db.scalars(
+        select(Device).where(Device.parent_id == data.parent_id, Device.name == data.name)
+    ).first()
+    if dup is not None:
+        raise ValueError("device name already exists under this parent")
     device = Device(**data.model_dump())
     db.add(device)
     db.commit()

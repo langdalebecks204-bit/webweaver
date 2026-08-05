@@ -1,0 +1,93 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.deps import get_current_user, require_admin
+from app.models import Device
+from app.schemas import DeviceCreate, DeviceUpdate
+from app.services.device_service import (
+    build_tree,
+    create_device as create_device_service,
+    delete_device as delete_device_service,
+    device_to_dict,
+    update_device as update_device_service,
+)
+
+router = APIRouter()
+
+
+def _get_or_404(db: Session, device_id: int) -> Device:
+    device = db.get(Device, device_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return device
+
+
+@router.get("")
+def list_devices(
+    status: str | None = None,
+    type: str | None = None,
+    db: Session = Depends(get_db),
+    _: object = Depends(get_current_user),
+):
+    query = select(Device).order_by(Device.order_index, Device.id)
+    if status:
+        query = query.where(Device.status == status)
+    if type:
+        query = query.where(Device.type == type)
+    return [device_to_dict(d) for d in db.scalars(query)]
+
+
+@router.get("/tree")
+def get_tree(db: Session = Depends(get_db), _: object = Depends(get_current_user)):
+    return build_tree(db)
+
+
+@router.get("/{device_id}")
+def get_device(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: object = Depends(get_current_user),
+):
+    return device_to_dict(_get_or_404(db, device_id))
+
+
+@router.post("", status_code=201)
+def create_device(
+    payload: DeviceCreate,
+    db: Session = Depends(get_db),
+    _: object = Depends(require_admin),
+):
+    try:
+        device = create_device_service(db, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return device_to_dict(device)
+
+
+@router.put("/{device_id}")
+def update_device(
+    device_id: int,
+    payload: DeviceUpdate,
+    db: Session = Depends(get_db),
+    _: object = Depends(require_admin),
+):
+    try:
+        device = update_device_service(db, device_id, payload)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Device not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return device_to_dict(device)
+
+
+@router.delete("/{device_id}")
+def delete_device(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: object = Depends(require_admin),
+):
+    _get_or_404(db, device_id)
+    deleted = delete_device_service(db, device_id)
+    return {"deleted": deleted}
