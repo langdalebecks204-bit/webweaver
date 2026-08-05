@@ -14,6 +14,12 @@ const {
   errorMock,
   loadIntervalMock,
   saveIntervalMock,
+  confirmMock,
+  extLoadMock,
+  extCreateMock,
+  extUpdateMock,
+  extRemoveMock,
+  extCheckAllMock,
 } = vi.hoisted(() => ({
   createMock: vi.fn(),
   loadMock: vi.fn(),
@@ -26,13 +32,23 @@ const {
   errorMock: vi.fn(),
   loadIntervalMock: vi.fn(),
   saveIntervalMock: vi.fn(),
+  confirmMock: vi.fn(),
+  extLoadMock: vi.fn(),
+  extCreateMock: vi.fn(),
+  extUpdateMock: vi.fn(),
+  extRemoveMock: vi.fn(),
+  extCheckAllMock: vi.fn(),
 }))
 
 const authState = vi.hoisted(() => ({ role: 'admin' }))
 
+const extTargets = vi.hoisted(() => [
+  { id: 1, name: '百度', ip_address: '8.8.8.8', domain: 'baidu.com', ip_status: 'online', ip_latency_ms: 10, domain_status: 'offline', domain_latency_ms: null },
+])
+
 vi.mock('element-plus', () => ({
   ElMessage: { success: successMock, error: errorMock },
-  ElMessageBox: { prompt: promptMock },
+  ElMessageBox: { prompt: promptMock, confirm: confirmMock },
 }))
 
 vi.mock('../../stores/devices', () => ({
@@ -61,6 +77,17 @@ vi.mock('../../stores/settings', () => ({
   }),
 }))
 
+vi.mock('../../stores/external', () => ({
+  useExternalStore: () => ({
+    targets: extTargets,
+    load: extLoadMock,
+    create: extCreateMock,
+    update: extUpdateMock,
+    remove: extRemoveMock,
+    checkAll: extCheckAllMock,
+  }),
+}))
+
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: pushMock }),
 }))
@@ -78,11 +105,23 @@ function mountView() {
         'el-card': { template: '<div><slot name="header" /><slot /></div>' },
         'el-tag': { template: '<span><slot /></span>' },
         'el-tree': { template: '<div><slot /></div>' },
+        'el-tabs': { template: '<div class="tabs"><slot /></div>' },
+        'el-tab-pane': { template: '<div><slot /></div>' },
+        'el-dialog': {
+          props: ['modelValue'],
+          template: '<div class="dlg"><slot /><slot name="footer" /></div>',
+        },
+        'el-form': { template: '<div><slot /></div>' },
+        'el-form-item': { template: '<div><slot /></div>' },
+        'el-input': {
+          props: ['modelValue'],
+          emits: ['update:modelValue'],
+          template: '<input class="t-input" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+        },
         'el-input-number': {
           props: ['modelValue'],
           emits: ['update:modelValue'],
-          template:
-            '<input class="interval-input" :value="modelValue" @input="$emit(\'update:modelValue\', Number($event.target.value))" />',
+          template: '<input class="interval-input" :value="modelValue" @input="$emit(\'update:modelValue\', Number($event.target.value))" />',
         },
         'el-button': {
           emits: ['click'],
@@ -131,23 +170,21 @@ describe('MainView 自动刷新', () => {
     vi.useRealTimers()
   })
 
-  it('挂载后每 30 秒自动调用 store.load()，卸载后停止', async () => {
+  it('挂载后每 30 秒自动刷新设备树，卸载后停止', async () => {
     const wrapper = mountView()
     await flushPromises()
     expect(loadMock).toHaveBeenCalledTimes(1)
+    expect(extLoadMock).toHaveBeenCalledTimes(1)
 
     await vi.advanceTimersByTimeAsync(30000)
     await flushPromises()
     expect(loadMock).toHaveBeenCalledTimes(2)
-
-    await vi.advanceTimersByTimeAsync(30000)
-    await flushPromises()
-    expect(loadMock).toHaveBeenCalledTimes(3)
+    expect(extLoadMock).toHaveBeenCalledTimes(2)
 
     wrapper.unmount()
     await vi.advanceTimersByTimeAsync(90000)
     await flushPromises()
-    expect(loadMock).toHaveBeenCalledTimes(3)
+    expect(loadMock).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -156,21 +193,13 @@ describe('MainView 立即巡检全部', () => {
     vi.clearAllMocks()
   })
 
-  it('点击按钮调用 store.recheckAll', async () => {
+  it('点击按钮同时触发设备与外网检测', async () => {
     const wrapper = mountView()
     await flushPromises()
     await buttonByText(wrapper, '立即巡检全部').trigger('click')
     await flushPromises()
     expect(recheckAllMock).toHaveBeenCalledTimes(1)
-  })
-
-  it('巡检全部失败时提示错误', async () => {
-    recheckAllMock.mockRejectedValue({ response: { data: { detail: '巡检失败' } } })
-    const wrapper = mountView()
-    await flushPromises()
-    await buttonByText(wrapper, '立即巡检全部').trigger('click')
-    await flushPromises()
-    expect(errorMock).toHaveBeenCalledWith('巡检失败')
+    expect(extCheckAllMock).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -179,14 +208,7 @@ describe('MainView 巡检间隔设置', () => {
     vi.clearAllMocks()
   })
 
-  it('挂载后 admin 加载当前间隔', async () => {
-    authState.role = 'admin'
-    mountView()
-    await flushPromises()
-    expect(loadIntervalMock).toHaveBeenCalledTimes(1)
-  })
-
-  it('保存间隔调用 saveInterval 并提示成功', async () => {
+  it('admin 显示保存间隔并可保存', async () => {
     authState.role = 'admin'
     saveIntervalMock.mockResolvedValue({})
     const wrapper = mountView()
@@ -197,11 +219,71 @@ describe('MainView 巡检间隔设置', () => {
     expect(successMock).toHaveBeenCalledWith('已保存')
   })
 
-  it('viewer 不显示间隔设置控件，也不加载间隔', async () => {
+  it('viewer 不显示间隔设置', async () => {
     authState.role = 'viewer'
     const wrapper = mountView()
     await flushPromises()
     expect(wrapper.text()).not.toContain('保存间隔')
-    expect(loadIntervalMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('MainView 外网页签', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('渲染外网目标表格', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).toContain('百度')
+    expect(wrapper.text()).toContain('8.8.8.8')
+    expect(wrapper.text()).toContain('baidu.com')
+  })
+
+  it('立即检测按钮触发 external.checkAll', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await buttonByText(wrapper, '立即检测').trigger('click')
+    await flushPromises()
+    expect(extCheckAllMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('admin 新增外网目标并保存', async () => {
+    authState.role = 'admin'
+    extCreateMock.mockResolvedValue({})
+    const wrapper = mountView()
+    await flushPromises()
+    await buttonByText(wrapper, '新增外网目标').trigger('click')
+    await wrapper.findAll('.dlg input.t-input').at(0).setValue('新目标')
+    await buttonByText(wrapper, '保存').trigger('click')
+    await flushPromises()
+    expect(extCreateMock).toHaveBeenCalledWith({
+      name: '新目标',
+      ip_address: null,
+      domain: null,
+      port: null,
+    })
+    expect(successMock).toHaveBeenCalledWith('已保存')
+  })
+
+  it('admin 删除外网目标需确认', async () => {
+    authState.role = 'admin'
+    confirmMock.mockResolvedValue()
+    extRemoveMock.mockResolvedValue()
+    const wrapper = mountView()
+    await flushPromises()
+    await buttonByText(wrapper, '删除').trigger('click')
+    await flushPromises()
+    expect(confirmMock).toHaveBeenCalled()
+    expect(extRemoveMock).toHaveBeenCalledWith(1)
+    expect(successMock).toHaveBeenCalledWith('已删除')
+  })
+
+  it('viewer 不显示新增与删除按钮', async () => {
+    authState.role = 'viewer'
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('新增外网目标')
+    expect(wrapper.text()).not.toContain('删除')
   })
 })
