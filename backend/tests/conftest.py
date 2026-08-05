@@ -15,13 +15,15 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def clean_db():
-    from app.database import SessionLocal
+    from app.database import Base, SessionLocal, engine
 
     try:
         from app.models import Device, User
     except ImportError:
         yield
         return
+
+    Base.metadata.create_all(bind=engine)
 
     with SessionLocal() as db:
         db.query(Device).delete()
