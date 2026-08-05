@@ -1,0 +1,120 @@
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import Device
+from app.schemas import DeviceCreate, DeviceUpdate
+
+
+def device_to_dict(d: Device) -> dict:
+    return {
+        "id": d.id,
+        "parent_id": d.parent_id,
+        "name": d.name,
+        "type": d.type,
+        "ip_address": d.ip_address,
+        "port": d.port,
+        "status": d.status,
+        "latency_ms": d.latency_ms,
+        "last_check": d.last_check,
+        "order_index": d.order_index,
+    }
+
+
+def get_descendant_ids(db: Session, root_id: int) -> list[int]:
+    ids = [root_id]
+    frontier = [root_id]
+    while frontier:
+        children = list(db.scalars(select(Device.id).where(Device.parent_id.in_(frontier))))
+        ids.extend(children)
+        frontier = children
+    return ids
+
+
+def _build(db: Session, nodes: list[Device]) -> list[dict]:
+    by_parent: dict[int | None, list[Device]] = {}
+    node_ids = {d.id for d in nodes}
+    for d in nodes:
+        by_parent.setdefault(d.parent_id, []).append(d)
+
+    def node(d: Device) -> dict:
+        item = device_to_dict(d)
+        item["children"] = [node(c) for c in by_parent.get(d.id, [])]
+        return item
+
+    return [node(d) for d in nodes if d.parent_id is None or d.parent_id not in node_ids]
+
+
+def build_tree(db: Session) -> list[dict]:
+    devices = db.scalars(select(Device).order_by(Device.order_index, Device.id)).all()
+    return _build(db, list(devices))
+
+
+def build_subtree(db: Session, root_id: int) -> dict:
+    ids = get_descendant_ids(db, root_id)
+    devices = db.scalars(
+        select(Device).where(Device.id.in_(ids)).order_by(Device.order_index, Device.id)
+    ).all()
+    tree = _build(db, list(devices))
+    return next((t for t in tree if t["id"] == root_id), None)
+
+
+def create_device(db: Session, data: DeviceCreate) -> Device:
+    if data.parent_id is not None:
+        parent = db.get(Device, data.parent_id)
+        if parent is None:
+            raise ValueError("parent device not found")
+        dup = db.scalars(
+            select(Device).where(Device.parent_id == data.parent_id, Device.name == data.name)
+        ).first()
+        if dup is not None:
+            raise ValueError("device name already exists under this parent")
+    device = Device(**data.model_dump())
+    db.add(device)
+    db.commit()
+    db.refresh(device)
+    return device
+
+
+def update_device(db: Session, device_id: int, data: DeviceUpdate) -> Device:
+    device = db.get(Device, device_id)
+    if device is None:
+        raise KeyError("device not found")
+
+    changes = data.model_dump(exclude_unset=True)
+    new_parent_id = changes.get("parent_id", device.parent_id)
+    new_name = changes.get("name", device.name)
+
+    if new_parent_id is not None:
+        if new_parent_id == device_id:
+            raise ValueError("parent cannot be self")
+        parent = db.get(Device, new_parent_id)
+        if parent is None:
+            raise ValueError("parent device not found")
+        if new_parent_id in get_descendant_ids(db, device_id):
+            raise ValueError("cycle not allowed")
+
+    dup = db.scalars(
+        select(Device).where(
+            Device.parent_id == new_parent_id,
+            Device.name == new_name,
+            Device.id != device_id,
+        )
+    ).first()
+    if dup is not None:
+        raise ValueError("device name already exists under this parent")
+
+    for key, value in changes.items():
+        setattr(device, key, value)
+    db.commit()
+    db.refresh(device)
+    return device
+
+
+def delete_device(db: Session, device_id: int) -> list[int]:
+    ids = get_descendant_ids(db, device_id)
+    objs = db.scalars(select(Device).where(Device.id.in_(ids))).all()
+    for o in objs:
+        db.expunge(o)
+    db.query(Device).where(Device.id.in_(ids)).delete(synchronize_session=False)
+    db.commit()
+    return ids
