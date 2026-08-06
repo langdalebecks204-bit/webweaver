@@ -1,0 +1,18 @@
+services:
+  webweaver:
+    image: ghcr.io/langdalebecks204-bit/webweaver:latest
+    container_name: webweaver
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    cap_add:
+      - NET_RAW
+    volumes:
+      - webweaver-data:/data
+    environment:
+      WEAVER_JWT_SECRET: ${WEAVER_JWT_SECRET:-change-me}
+      WEAVER_DEFAULT_ADMIN_PASSWORD: ${WEAVER_DEFAULT_ADMIN_PASSWORD:-admin123}
+      WEAVER_POLL_INTERVAL_MINUTES: ${WEAVER_POLL_INTERVAL_MINUTES:-5}
+
+volumes:
+  webweaver-data:
