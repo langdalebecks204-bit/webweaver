@@ -90,6 +90,8 @@ vi.mock('../../stores/external', () => ({
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: pushMock }),
+  createRouter: () => ({ beforeEach: vi.fn() }),
+  createWebHistory: () => ({}),
 }))
 
 import MainView from '../MainView.vue'
@@ -99,6 +101,8 @@ function mountView() {
     global: {
       stubs: {
         DeviceTree: { template: '<div class="device-tree-stub" />' },
+        UsersPanel: { template: '<div class="users-panel-stub" />' },
+        BackupPanel: { template: '<div class="backup-panel-stub" />' },
         'el-container': { template: '<div><slot /></div>' },
         'el-header': { template: '<header><slot /></header>' },
         'el-main': { template: '<main><slot /></main>' },
@@ -106,7 +110,7 @@ function mountView() {
         'el-tag': { template: '<span><slot /></span>' },
         'el-tree': { template: '<div><slot /></div>' },
         'el-tabs': { template: '<div class="tabs"><slot /></div>' },
-        'el-tab-pane': { template: '<div><slot /></div>' },
+        'el-tab-pane': { template: '<div :data-label="$attrs.label"><slot /></div>' },
         'el-dialog': {
           props: ['modelValue'],
           template: '<div class="dlg"><slot /><slot name="footer" /></div>',
@@ -285,5 +289,27 @@ describe('MainView 外网页签', () => {
     await flushPromises()
     expect(wrapper.text()).not.toContain('新增外网目标')
     expect(wrapper.text()).not.toContain('删除')
+  })
+})
+
+describe('MainView 管理页签', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('admin 显示用户管理与备份与恢复页签', async () => {
+    authState.role = 'admin'
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-label="用户管理"]').exists()).toBe(true)
+    expect(wrapper.find('[data-label="备份与恢复"]').exists()).toBe(true)
+  })
+
+  it('viewer 不显示管理页签', async () => {
+    authState.role = 'viewer'
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-label="用户管理"]').exists()).toBe(false)
+    expect(wrapper.find('[data-label="备份与恢复"]').exists()).toBe(false)
   })
 })

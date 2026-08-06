@@ -7,6 +7,8 @@ import { useDevicesStore } from '../stores/devices'
 import { useSettingsStore } from '../stores/settings'
 import { useExternalStore } from '../stores/external'
 import DeviceTree from '../components/DeviceTree.vue'
+import UsersPanel from '../components/UsersPanel.vue'
+import BackupPanel from '../components/BackupPanel.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -225,6 +227,12 @@ async function onExternalCheckAll() {
               </tbody>
             </table>
           </el-card>
+        </el-tab-pane>
+        <el-tab-pane v-if="isAdmin" label="用户管理" name="users">
+          <UsersPanel />
+        </el-tab-pane>
+        <el-tab-pane v-if="isAdmin" label="备份与恢复" name="backup">
+          <BackupPanel />
         </el-tab-pane>
       </el-tabs>
 
