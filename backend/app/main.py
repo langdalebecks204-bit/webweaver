@@ -1,6 +1,9 @@
 from contextlib import asynccontextmanager
+import os
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
+from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.database import init_db
@@ -34,3 +37,20 @@ app.include_router(backup.router, prefix="/api/backup", tags=["backup"])
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def serve_frontend(full_path: str):
+    base = Path(os.environ.get("WEAVER_FRONTEND_DIR", "/app/frontend/dist"))
+    if not base.is_dir():
+        return Response(status_code=404)
+    target = (base / full_path).resolve()
+    if not str(target).startswith(str(base.resolve())):
+        return Response(status_code=404)
+    if target.is_dir():
+        target = target / "index.html"
+    if not target.is_file():
+        target = base / "index.html"
+    if not target.is_file():
+        return Response(status_code=404)
+    return FileResponse(target)
