@@ -118,3 +118,38 @@ def test_import_reschedules_interval(client, admin_headers, monkeypatch):
     r = client.post("/api/backup/import?mode=replace", headers=admin_headers, json=data)
     assert r.status_code == 200
     assert called and called[-1] == 9
+
+
+def test_reset_clears_and_reseeds_admin(client, admin_headers):
+    _tree(client, admin_headers)
+    client.post("/api/users", headers=admin_headers,
+                json={"username": "u1", "password": "pw123456", "role": "viewer"})
+
+    r = client.post("/api/backup/reset", headers=admin_headers)
+    assert r.status_code == 200
+
+    assert client.get("/api/devices", headers=admin_headers).json() == []
+    assert client.get("/api/external", headers=admin_headers).json() == []
+    got = client.get("/api/settings/inspection-interval", headers=admin_headers).json()
+    assert got["poll_interval_minutes"] == 5
+    me = client.get("/api/auth/me", headers=admin_headers).json()
+    assert me["username"] == "admin"
+    assert client.post("/api/auth/login",
+                       json={"username": "u1", "password": "pw123456"}).status_code == 401
+
+
+def test_reset_reschedules_interval(client, admin_headers, monkeypatch):
+    from app.config import settings as app_settings
+    from app.routers import backup as backup_router
+
+    called = []
+    monkeypatch.setattr(backup_router, "reschedule_interval", lambda m: called.append(m))
+    client.post("/api/backup/reset", headers=admin_headers)
+    assert called and called[-1] == app_settings.poll_interval_minutes
+
+
+def test_backup_import_and_reset_admin_only(client):
+    vh = _mk_viewer(client)
+    assert client.post("/api/backup/import?mode=replace", headers=vh,
+                       json={"version": 1}).status_code == 403
+    assert client.post("/api/backup/reset", headers=vh).status_code == 403

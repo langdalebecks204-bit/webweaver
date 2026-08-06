@@ -1,7 +1,8 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Device, ExternalTarget, Setting, utcnow
+from app.database import seed_default_admin
+from app.models import Device, ExternalTarget, Setting, User, utcnow
 
 BACKUP_VERSION = 1
 _VALID_TYPES = {"group", "server", "switch", "terminal"}
@@ -146,3 +147,12 @@ def _import_settings(db: Session, items) -> None:
             db.add(Setting(key=key, value=value))
         else:
             existing.value = value
+
+
+def reset_all(db: Session) -> None:
+    db.query(Device).delete()
+    db.query(ExternalTarget).delete()
+    db.query(Setting).delete()
+    db.query(User).delete()
+    db.commit()
+    seed_default_admin()

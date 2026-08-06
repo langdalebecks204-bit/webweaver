@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.config import settings
 from app.deps import require_admin
 from app.inspector.scheduler import reschedule_interval
 from app.models import User
-from app.services.backup_service import export_backup, import_backup
+from app.services.backup_service import export_backup, import_backup, reset_all
 from app.services.setting_service import get_poll_interval
 
 router = APIRouter()
@@ -45,3 +46,13 @@ async def import_backup_endpoint(
         raise HTTPException(status_code=422, detail=str(exc))
     reschedule_interval(get_poll_interval(db))
     return {"ok": True, "mode": mode}
+
+
+@router.post("/reset")
+def reset_endpoint(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    reset_all(db)
+    reschedule_interval(settings.poll_interval_minutes)
+    return {"ok": True}
