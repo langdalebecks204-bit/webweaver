@@ -1,0 +1,11 @@
+**/.venv
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/dist
+backend/weaver.db
+backend/.env
+.git
+.gitignore
+docs
+*.log
