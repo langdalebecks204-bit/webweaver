@@ -4,7 +4,7 @@ from fastapi import FastAPI
 
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, devices, external, users
+from app.routers import auth, backup, devices, external, users
 from app.routers import settings as settings_router
 
 
@@ -28,6 +28,7 @@ app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(devices.router, prefix="/api/devices", tags=["devices"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
 app.include_router(external.router, prefix="/api/external", tags=["external"])
+app.include_router(backup.router, prefix="/api/backup", tags=["backup"])
 
 
 @app.get("/api/health")
