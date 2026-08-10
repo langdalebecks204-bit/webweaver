@@ -87,7 +87,7 @@ def get_device_history(
         "device_id": device_id,
         "records": [
             {
-                "checked_at": r.checked_at.isoformat(),
+                "checked_at": r.checked_at.replace(tzinfo=timezone.utc).isoformat(),
                 "status": r.status,
                 "latency_ms": r.latency_ms,
             }
