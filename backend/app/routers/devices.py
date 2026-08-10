@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from datetime import datetime, timedelta, timezone
 
 from app.database import get_db
 from app.deps import get_current_user, require_admin
 from app.inspector.engine import run_external_inspection, run_inspection
 from app.inspector.scheduler import collect_all_targets, collect_external_targets
-from app.models import Device
+from app.models import Device, ProbeRecord
 from app.schemas import DeviceCreate, DeviceUpdate
 from app.services.device_service import (
     build_tree,
@@ -66,6 +67,33 @@ def get_device(
     _: object = Depends(get_current_user),
 ):
     return device_to_dict(_get_or_404(db, device_id))
+
+
+@router.get("/{device_id}/history")
+def get_device_history(
+    device_id: int,
+    days: int = Query(default=7, ge=1),
+    db: Session = Depends(get_db),
+    _: object = Depends(get_current_user),
+):
+    _get_or_404(db, device_id)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    records = db.scalars(
+        select(ProbeRecord)
+        .where(ProbeRecord.device_id == device_id, ProbeRecord.checked_at >= cutoff)
+        .order_by(ProbeRecord.checked_at)
+    ).all()
+    return {
+        "device_id": device_id,
+        "records": [
+            {
+                "checked_at": r.checked_at.isoformat(),
+                "status": r.status,
+                "latency_ms": r.latency_ms,
+            }
+            for r in records
+        ],
+    }
 
 
 @router.post("", status_code=201)

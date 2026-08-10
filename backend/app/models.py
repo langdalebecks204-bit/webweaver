@@ -66,3 +66,15 @@ class ExternalTarget(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utcnow, onupdate=utcnow
     )
+
+
+class ProbeRecord(Base):
+    __tablename__ = "probe_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    device_id: Mapped[int] = mapped_column(
+        ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    checked_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow, index=True)
+    status: Mapped[str] = mapped_column(String(10), nullable=False)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)

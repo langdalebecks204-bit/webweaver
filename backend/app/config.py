@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-secret-change-me"
     token_expire_minutes: int = 480
     poll_interval_minutes: int = 5
+    probe_history_days: int = 30
     ping_concurrency: int = 100
     ping_timeout: float = 1.0
     tcp_timeout: float = 2.0

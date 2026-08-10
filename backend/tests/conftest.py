@@ -18,7 +18,7 @@ def clean_db():
     from app.database import Base, SessionLocal, engine
 
     try:
-        from app.models import Device, ExternalTarget, Setting, User
+        from app.models import Device, ExternalTarget, ProbeRecord, Setting, User
     except ImportError:
         yield
         return
@@ -26,6 +26,7 @@ def clean_db():
     Base.metadata.create_all(bind=engine)
 
     with SessionLocal() as db:
+        db.query(ProbeRecord).delete()
         db.query(Device).delete()
         db.query(ExternalTarget).delete()
         db.query(Setting).delete()
@@ -33,6 +34,7 @@ def clean_db():
         db.commit()
     yield
     with SessionLocal() as db:
+        db.query(ProbeRecord).delete()
         db.query(Device).delete()
         db.query(ExternalTarget).delete()
         db.query(Setting).delete()
