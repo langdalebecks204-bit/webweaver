@@ -173,17 +173,19 @@ async function onExternalCheckAll() {
                 </div>
               </div>
             </template>
-            <el-tree
-              :data="store.tree"
-              :props="{ label: 'name', children: 'children' }"
-              node-key="id"
-              default-expand-all
-              :expand-on-click-node="false"
-            >
-              <template #default="{ data }">
-                <DeviceTree :node="data" />
-              </template>
-            </el-tree>
+            <div class="tree-scroll">
+              <el-tree
+                :data="store.tree"
+                :props="{ label: 'name', children: 'children' }"
+                node-key="id"
+                default-expand-all
+                :expand-on-click-node="false"
+              >
+                <template #default="{ data }">
+                  <DeviceTree :node="data" />
+                </template>
+              </el-tree>
+            </div>
           </el-card>
         </el-tab-pane>
         <el-tab-pane label="外网" name="external">
@@ -288,6 +290,14 @@ async function onExternalCheckAll() {
   margin-left: auto;
   display: flex;
   gap: 8px;
+}
+.tree-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+.tree-scroll :deep(.el-tree) {
+  min-width: max-content;
 }
 .interval-setting {
   display: flex;

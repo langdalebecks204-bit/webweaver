@@ -164,3 +164,23 @@ describe('DeviceTree 父级选择', () => {
     expect(updateMock).toHaveBeenCalledWith(3, expect.objectContaining({ parent_id: null }))
   })
 })
+
+describe('DeviceTree 查看历史', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('带 IP 节点右键发射 open-history', async () => {
+    const wrapper = mountTree('history', defaultNode)
+    await wrapper.find('.dd').trigger('click')
+    const emitted = wrapper.emitted('open-history')
+    expect(emitted).toBeTruthy()
+    expect(emitted[0][0]).toEqual(defaultNode)
+  })
+
+  it('不带 IP 的节点不发射 open-history', async () => {
+    const wrapper = mountTree('history', { ...defaultNode, ip_address: null })
+    await wrapper.find('.dd').trigger('click')
+    expect(wrapper.emitted('open-history')).toBeFalsy()
+  })
+})

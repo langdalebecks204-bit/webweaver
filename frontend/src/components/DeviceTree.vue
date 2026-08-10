@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDevicesStore } from '../stores/devices'
 
 const props = defineProps({ node: { type: Object, required: true } })
+const emit = defineEmits(['open-history'])
 const store = useDevicesStore()
 const dialogVisible = ref(false)
 const editing = ref(null)
@@ -70,8 +71,11 @@ function onCommand(command) {
   if (command === 'add-child') openCreate(props.node.id)
   else if (command === 'add-sibling') openCreate(props.node.parent_id)
   else if (command === 'edit') openEdit()
-  else if (command === 'delete') remove()
   else if (command === 'recheck') store.recheck(props.node.id)
+  else if (command === 'delete') remove()
+  else if (command === 'history') {
+    if (props.node.ip_address) emit('open-history', props.node)
+  }
 }
 
 function collectDescendantIds(node, acc) {
@@ -123,6 +127,7 @@ const parentCandidates = computed(() => {
         <el-dropdown-item command="add-child">添加子节点</el-dropdown-item>
         <el-dropdown-item command="add-sibling">添加同级</el-dropdown-item>
         <el-dropdown-item command="edit">编辑</el-dropdown-item>
+        <el-dropdown-item v-if="props.node.ip_address" command="history">查看历史</el-dropdown-item>
         <el-dropdown-item command="recheck">立即巡检</el-dropdown-item>
         <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
       </el-dropdown-menu>
