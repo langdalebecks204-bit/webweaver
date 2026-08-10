@@ -9,6 +9,7 @@ import { useExternalStore } from '../stores/external'
 import DeviceTree from '../components/DeviceTree.vue'
 import UsersPanel from '../components/UsersPanel.vue'
 import BackupPanel from '../components/BackupPanel.vue'
+import DeviceHistory from '../components/DeviceHistory.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -17,6 +18,7 @@ const settings = useSettingsStore()
 const external = useExternalStore()
 
 const activeTab = ref('devices')
+const historyDevice = ref(null)
 const targetDialogVisible = ref(false)
 const targetEditing = ref(null)
 const targetForm = ref({ name: '', ip_address: '', domain: '', port: null })
@@ -182,7 +184,7 @@ async function onExternalCheckAll() {
                 :expand-on-click-node="false"
               >
                 <template #default="{ data }">
-                  <DeviceTree :node="data" />
+                  <DeviceTree :node="data" @open-history="historyDevice = $event" />
                 </template>
               </el-tree>
             </div>
@@ -237,6 +239,12 @@ async function onExternalCheckAll() {
           <BackupPanel />
         </el-tab-pane>
       </el-tabs>
+
+      <DeviceHistory
+        v-if="historyDevice"
+        :device="historyDevice"
+        @close="historyDevice = null"
+      />
 
       <el-dialog v-model="targetDialogVisible" :title="targetEditing ? '编辑外网目标' : '新增外网目标'">
         <el-form label-width="80px">

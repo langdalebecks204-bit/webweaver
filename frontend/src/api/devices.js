@@ -27,3 +27,7 @@ export function recheckDevice(id) {
 export function recheckAllDevices() {
   return client.post('/devices/recheck-all')
 }
+
+export function fetchDeviceHistory(id, days) {
+  return client.get(`/devices/${id}/history`, { params: { days } })
+}
