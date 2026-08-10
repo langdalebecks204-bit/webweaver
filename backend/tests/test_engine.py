@@ -1,8 +1,14 @@
 import pytest
 
+from datetime import datetime, timedelta, timezone
+
 from app.database import SessionLocal, init_db
 from app.inspector.engine import ProbeResult, probe_device, run_inspection
 from app.models import Device
+
+
+def _naive_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 @pytest.fixture()
@@ -60,6 +66,46 @@ async def test_run_inspection_updates_db(monkeypatch, db):
     assert results[0]["status"] == "online"
     assert results[0]["latency_ms"] == 8
     assert dev.last_check is not None
+
+
+async def test_run_inspection_writes_probe_record(monkeypatch, db):
+    from app.models import ProbeRecord
+
+    dev = Device(name="sw", type="switch", ip_address="10.0.0.1", port=22)
+    db.add(dev)
+    db.commit()
+
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+        return ProbeResult(status="online", latency_ms=8)
+
+    monkeypatch.setattr("app.inspector.engine.probe_device", fake_probe)
+    await run_inspection(db, [dev])
+
+    rec = db.query(ProbeRecord).filter(ProbeRecord.device_id == dev.id).one()
+    assert rec.status == "online"
+    assert rec.latency_ms == 8
+    assert rec.checked_at is not None
+
+
+async def test_run_inspection_cleans_old_records(monkeypatch, db):
+    from app.models import ProbeRecord
+
+    dev = Device(name="sw", type="switch", ip_address="10.0.0.1", port=22)
+    db.add(dev)
+    db.commit()
+    old = _naive_now() - timedelta(days=100)
+    db.add(ProbeRecord(device_id=dev.id, checked_at=old, status="offline", latency_ms=None))
+    db.commit()
+
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+        return ProbeResult(status="online", latency_ms=5)
+
+    monkeypatch.setattr("app.inspector.engine.probe_device", fake_probe)
+    await run_inspection(db, [dev])
+
+    left = db.query(ProbeRecord).filter(ProbeRecord.device_id == dev.id).all()
+    assert len(left) == 1
+    assert left[0].status == "online"
 
 
 async def test_run_external_inspection_updates_both(monkeypatch, db):

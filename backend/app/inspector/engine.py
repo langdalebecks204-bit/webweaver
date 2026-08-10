@@ -1,6 +1,7 @@
 import asyncio
 import socket
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 try:
     from ping3.asyncio import async_ping
@@ -11,9 +12,10 @@ except ImportError:
         return await asyncio.to_thread(ping3.ping, host, timeout=timeout, unit=unit)
 
 from app.config import settings
-from app.models import Device, ExternalTarget, utcnow
+from app.models import Device, ExternalTarget, ProbeRecord, utcnow
 from app.services.device_service import device_to_dict
 from app.services.external_service import external_target_to_dict
+from app.services.setting_service import get_probe_history_days
 
 
 @dataclass
@@ -68,9 +70,23 @@ async def run_inspection(db, devices: list[Device]) -> list[dict]:
         device.status = result.status
         device.latency_ms = result.latency_ms
         device.last_check = utcnow()
+        db.add(
+            ProbeRecord(
+                device_id=device.id,
+                checked_at=device.last_check,
+                status=result.status,
+                latency_ms=result.latency_ms,
+            )
+        )
         return device_to_dict(device)
 
     results = await asyncio.gather(*(check_one(d) for d in devices))
+    if devices:
+        history_days = get_probe_history_days(db)
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=history_days)
+        db.query(ProbeRecord).filter(ProbeRecord.checked_at < cutoff).delete(
+            synchronize_session=False
+        )
     db.commit()
     return list(results)
 

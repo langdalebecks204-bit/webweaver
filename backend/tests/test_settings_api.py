@@ -73,3 +73,43 @@ def test_interval_out_of_range(client, admin_headers):
         headers=admin_headers,
         json={"poll_interval_minutes": 1441},
     ).status_code == 422
+
+
+def test_probe_history_days_default(client, admin_headers):
+    r = client.get("/api/settings/probe-history-days", headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json() == {"probe_history_days": 30}
+
+
+def test_probe_history_days_put_persists(client, admin_headers):
+    r = client.put(
+        "/api/settings/probe-history-days",
+        headers=admin_headers,
+        json={"probe_history_days": 60},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"probe_history_days": 60}
+
+    got = client.get("/api/settings/probe-history-days", headers=admin_headers)
+    assert got.json() == {"probe_history_days": 60}
+
+    with SessionLocal() as db:
+        row = db.get(Setting, "probe_history_days")
+        assert row.value == "60"
+
+
+def test_probe_history_days_admin_only(client, admin_headers):
+    vh = _mk_viewer(client)
+    assert client.get("/api/settings/probe-history-days", headers=vh).status_code == 403
+    assert client.put(
+        "/api/settings/probe-history-days", headers=vh, json={"probe_history_days": 10}
+    ).status_code == 403
+
+
+def test_probe_history_days_out_of_range(client, admin_headers):
+    assert client.put(
+        "/api/settings/probe-history-days", headers=admin_headers, json={"probe_history_days": 0}
+    ).status_code == 422
+    assert client.put(
+        "/api/settings/probe-history-days", headers=admin_headers, json={"probe_history_days": 366}
+    ).status_code == 422
