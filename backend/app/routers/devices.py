@@ -82,7 +82,7 @@ def get_device_history(
     records = db.scalars(
         select(ProbeRecord)
         .where(ProbeRecord.device_id == device_id, ProbeRecord.checked_at >= cutoff)
-        .order_by(ProbeRecord.checked_at)
+        .order_by(ProbeRecord.checked_at.desc())
     ).all()
     return {
         "device_id": device_id,
@@ -145,8 +145,8 @@ def upload_device_image(
     _: object = Depends(require_admin),
 ):
     device = _get_or_404(db, device_id)
-    delete_image_file(device_id)
-    device.image_url = upload_image(device_id, file)
+    new_url = upload_image(device_id, file)
+    device.image_url = new_url
     db.commit()
     db.refresh(device)
     return device_to_dict(device)

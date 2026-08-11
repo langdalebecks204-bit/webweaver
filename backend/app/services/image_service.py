@@ -23,6 +23,7 @@ ALLOWED_MIME = {
 
 MAX_EDGE = 1600
 MAX_BYTES = 300 * 1024
+MAX_UPLOAD_BYTES = 30 * 1024 * 1024
 
 
 def _process_image(data: bytes) -> bytes:
@@ -30,6 +31,11 @@ def _process_image(data: bytes) -> bytes:
 
     try:
         img = Image.open(io.BytesIO(data))
+        if img.width > MAX_EDGE or img.height > MAX_EDGE:
+            try:
+                img.draft("RGB", (MAX_EDGE, MAX_EDGE))
+            except Exception:
+                pass
         img.load()
     except Exception:
         raise HTTPException(status_code=422, detail="无法解码图片")
@@ -49,7 +55,9 @@ def _process_image(data: bytes) -> bytes:
 def upload_image(device_id: int, file: UploadFile) -> str:
     if file.content_type not in ALLOWED_MIME:
         raise HTTPException(status_code=422, detail="仅支持 jpeg/png/webp/heic 图片")
-    raw = file.file.read()
+    raw = file.file.read(MAX_UPLOAD_BYTES + 1)
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="图片过大，请上传小于 30MB 的图片")
     if not raw:
         raise HTTPException(status_code=422, detail="空文件")
     processed = _process_image(raw)

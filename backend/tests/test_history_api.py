@@ -24,7 +24,7 @@ def _now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def test_history_returns_ascending_records(client, admin_headers):
+def test_history_returns_descending_records(client, admin_headers):
     dev = client.post("/api/devices", headers=admin_headers, json={"name": "sw", "type": "switch", "ip_address": "10.0.0.1"})
     assert dev.status_code == 201
     dev_id = dev.json()["id"]
@@ -36,10 +36,10 @@ def test_history_returns_ascending_records(client, admin_headers):
     assert r.status_code == 200
     body = r.json()
     assert body["device_id"] == dev_id
-    assert [rec["status"] for rec in body["records"]] == ["online", "offline"]
-    assert body["records"][0]["latency_ms"] == 8
-    assert body["records"][1]["latency_ms"] is None
-    assert body["records"][1]["checked_at"] >= body["records"][0]["checked_at"]
+    assert [rec["status"] for rec in body["records"]] == ["offline", "online"]
+    assert body["records"][0]["latency_ms"] is None
+    assert body["records"][1]["latency_ms"] == 8
+    assert body["records"][0]["checked_at"] >= body["records"][1]["checked_at"]
 
 
 def test_history_days_filters_old(client, admin_headers):

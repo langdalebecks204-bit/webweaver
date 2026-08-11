@@ -26,6 +26,10 @@ const detailDevice = ref(null)
 const targetDialogVisible = ref(false)
 const targetEditing = ref(null)
 const targetForm = ref({ name: '', ip_address: '', domain: '', port: null })
+const deviceDialogVisible = ref(false)
+const deviceEditing = ref(null)
+const deviceForm = ref({ name: '', type: 'group', ip_address: '', port: null, location: '' })
+const deviceCandidates = ref([])
 const isAdmin = computed(() => auth.user?.role === 'admin')
 
 let refreshTimer
@@ -142,6 +146,56 @@ async function onExternalCheckAll() {
     ElMessage.error(error.response?.data?.detail || '检测失败')
   }
 }
+
+function collectDeviceDescendantIds(node, acc) {
+  if (!node.children) return acc
+  for (const c of node.children) {
+    acc.add(c.id)
+    collectDeviceDescendantIds(c, acc)
+  }
+  return acc
+}
+
+function openDeviceEdit(device) {
+  const descendants = collectDeviceDescendantIds(device, new Set([device.id]))
+  const candidates = []
+  const walk = (nodes, depth) => {
+    for (const n of nodes) {
+      if (descendants.has(n.id)) continue
+      candidates.push({ id: n.id, name: n.name, depth })
+      if (n.children && n.children.length) walk(n.children, depth + 1)
+    }
+  }
+  walk(store.tree, 0)
+  deviceCandidates.value = candidates
+  deviceEditing.value = device
+  deviceForm.value = {
+    name: device.name,
+    type: device.type,
+    ip_address: device.ip_address || '',
+    port: device.port,
+    location: device.location || '',
+  }
+  deviceDialogVisible.value = true
+}
+
+async function onSaveDevice() {
+  const parentId = deviceEditing.value.parent_id
+  const payload = {
+    ...deviceForm.value,
+    parent_id: parentId,
+    ip_address: deviceForm.value.ip_address || null,
+    port: deviceForm.value.port || null,
+    location: deviceForm.value.location || null,
+  }
+  try {
+    await store.update(deviceEditing.value.id, payload)
+    deviceDialogVisible.value = false
+    ElMessage.success('已保存')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || '保存失败')
+  }
+}
 </script>
 
 <template>
@@ -200,7 +254,7 @@ async function onExternalCheckAll() {
                 </template>
               </el-tree>
             </div>
-            <DeviceTable v-else />
+            <DeviceTable v-else :on-edit="openDeviceEdit" />
           </el-card>
         </el-tab-pane>
         <el-tab-pane label="外网" name="external">
@@ -284,6 +338,35 @@ async function onExternalCheckAll() {
         <template #footer>
           <el-button @click="targetDialogVisible = false">取消</el-button>
           <el-button type="primary" @click="onSaveTarget">保存</el-button>
+        </template>
+      </el-dialog>
+
+      <el-dialog v-model="deviceDialogVisible" title="编辑设备" width="460px">
+        <el-form label-width="90px">
+          <el-form-item label="名称">
+            <el-input v-model="deviceForm.name" />
+          </el-form-item>
+          <el-form-item label="类型">
+            <el-select v-model="deviceForm.type" style="width: 100%">
+              <el-option label="分组" value="group" />
+              <el-option label="服务器" value="server" />
+              <el-option label="交换机" value="switch" />
+              <el-option label="终端" value="terminal" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="IP 地址">
+            <el-input v-model="deviceForm.ip_address" placeholder="留空表示纯分组节点" />
+          </el-form-item>
+          <el-form-item label="TCP 端口">
+            <el-input-number v-model="deviceForm.port" :min="1" :max="65535" placeholder="可选" />
+          </el-form-item>
+          <el-form-item label="位置">
+            <el-input v-model="deviceForm.location" placeholder="如：机房A/机架1（可选）" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="deviceDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="onSaveDevice">保存</el-button>
         </template>
       </el-dialog>
     </el-main>

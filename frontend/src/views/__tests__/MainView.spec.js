@@ -6,6 +6,7 @@ const {
   createMock,
   loadMock,
   recheckAllMock,
+  updateMock,
   loadMeMock,
   logoutMock,
   pushMock,
@@ -24,6 +25,7 @@ const {
   createMock: vi.fn(),
   loadMock: vi.fn(),
   recheckAllMock: vi.fn(),
+  updateMock: vi.fn(),
   loadMeMock: vi.fn(),
   logoutMock: vi.fn(),
   pushMock: vi.fn(),
@@ -42,6 +44,30 @@ const {
 
 const authState = vi.hoisted(() => ({ role: 'admin' }))
 
+const devTree = vi.hoisted(() => [
+  {
+    id: 1,
+    name: '机房A',
+    parent_id: null,
+    type: 'group',
+    location: null,
+    status: 'unknown',
+    children: [
+      {
+        id: 2,
+        name: '核心交换机',
+        type: 'switch',
+        parent_id: 1,
+        ip_address: '10.0.0.1',
+        port: 22,
+        location: '机架1',
+        status: 'online',
+        children: [],
+      },
+    ],
+  },
+])
+
 const extTargets = vi.hoisted(() => [
   { id: 1, name: '百度', ip_address: '8.8.8.8', domain: 'baidu.com', ip_status: 'online', ip_latency_ms: 10, domain_status: 'offline', domain_latency_ms: null },
 ])
@@ -53,10 +79,11 @@ vi.mock('element-plus', () => ({
 
 vi.mock('../../stores/devices', () => ({
   useDevicesStore: () => ({
-    tree: [],
+    tree: devTree,
     stats: { online: 0, offline: 0, warning: 0, unknown: 0 },
     load: loadMock,
     create: createMock,
+    update: updateMock,
     recheckAll: recheckAllMock,
   }),
 }))
@@ -101,7 +128,10 @@ function mountView() {
     global: {
       stubs: {
         DeviceTree: { template: '<div class="device-tree-stub" />' },
-        DeviceTable: { template: '<div class="device-table-stub" />' },
+        DeviceTable: {
+          props: ['onEdit'],
+          template: '<div class="device-table-stub"><button class="table-edit" @click="onEdit({ id: 2, name: \'核心交换机\', type: \'switch\', parent_id: 1, ip_address: \'10.0.0.1\', port: 22, location: \'机架1\' })">编辑</button></div>',
+        },
         DeviceDetail: { template: '<div class="device-detail-stub" />' },
         UsersPanel: { template: '<div class="users-panel-stub" />' },
         BackupPanel: { template: '<div class="backup-panel-stub" />' },
@@ -125,7 +155,7 @@ function mountView() {
         'el-tab-pane': { template: '<div :data-label="$attrs.label"><slot /></div>' },
         'el-dialog': {
           props: ['modelValue'],
-          template: '<div class="dlg"><slot /><slot name="footer" /></div>',
+          template: '<div v-if="modelValue" class="dlg"><slot /><slot name="footer" /></div>',
         },
         'el-form': { template: '<div><slot /></div>' },
         'el-form-item': { template: '<div><slot /></div>' },
@@ -340,5 +370,48 @@ describe('MainView 树形/表格切换', () => {
     await flushPromises()
     expect(wrapper.find('.device-tree-stub').exists()).toBe(false)
     expect(wrapper.find('.device-table-stub').exists()).toBe(true)
+  })
+})
+
+describe('MainView 表格编辑设备', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('表格编辑按钮打开对话框并预填表单', async () => {
+    updateMock.mockResolvedValue({})
+    const wrapper = mountView()
+    await flushPromises()
+    const switchEl = wrapper.findComponent('.view-switch')
+    switchEl.vm.$emit('update:modelValue', 'table')
+    await flushPromises()
+    await wrapper.find('.table-edit').trigger('click')
+    await flushPromises()
+    const inputs = wrapper.findAll('.dlg input')
+    expect(inputs.find((i) => i.element.value === '核心交换机')).toBeTruthy()
+    expect(inputs.find((i) => i.element.value === '10.0.0.1')).toBeTruthy()
+  })
+
+  it('保存时提交编辑数据', async () => {
+    updateMock.mockResolvedValue({})
+    const wrapper = mountView()
+    await flushPromises()
+    const switchEl = wrapper.findComponent('.view-switch')
+    switchEl.vm.$emit('update:modelValue', 'table')
+    await flushPromises()
+    await wrapper.find('.table-edit').trigger('click')
+    await flushPromises()
+    await wrapper.findAll('.dlg input.t-input').at(0).setValue('核心交换2')
+    const saveBtns = wrapper.findAll('button').filter((b) => b.text() === '保存')
+    await saveBtns.at(-1).trigger('click')
+    await flushPromises()
+    expect(updateMock).toHaveBeenCalledWith(2, expect.objectContaining({
+      name: '核心交换2',
+      parent_id: 1,
+      ip_address: '10.0.0.1',
+      port: 22,
+      location: '机架1',
+    }))
+    expect(successMock).toHaveBeenCalledWith('已保存')
   })
 })

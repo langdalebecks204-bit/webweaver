@@ -87,6 +87,72 @@ def test_upload_requires_admin(client, admin_headers):
     assert _upload(client, cid, vh, _make_png()).status_code == 403
 
 
+def test_upload_oversized_file_rejected(client, admin_headers):
+    created = client.post("/api/devices", headers=admin_headers,
+                          json={"name": "S1", "type": "switch"})
+    cid = created.json()["id"]
+    from app.services.image_service import MAX_UPLOAD_BYTES
+
+    big = bytearray(MAX_UPLOAD_BYTES + 1024)
+    big[0] = 0x89
+    big[1] = 0x50
+    big[2] = 0x4E
+    big[3] = 0x47
+    r = _upload(client, cid, admin_headers, bytes(big))
+    assert r.status_code == 413
+
+
+def test_process_uses_draft_before_load_for_large_jpeg(monkeypatch):
+    import io as _io
+
+    from PIL import Image
+
+    from app.services.image_service import _process_image
+
+    big = Image.new("RGB", (4000, 3000), (10, 20, 30))
+    buf = _io.BytesIO()
+    big.save(buf, format="JPEG", quality=90)
+    raw = buf.getvalue()
+
+    drafts = []
+
+    orig_open = Image.open
+
+    def fake_open(fp, *a, **kw):
+        img = orig_open(fp, *a, **kw)
+        orig_draft = img.draft
+
+        def wrapped_draft(mode, size):
+            drafts.append(size)
+            return orig_draft(mode, size)
+
+        img.draft = wrapped_draft
+        return img
+
+    monkeypatch.setattr(Image, "open", staticmethod(fake_open))
+    out = _process_image(raw)
+    assert out[:2] == b"\xff\xd8"
+    target = next((s for s in drafts if s[0] > 1000 and s[1] > 1000), None)
+    assert target is not None, "expected explicit draft() with large target size"
+    assert max(target) <= 1600
+
+
+def test_replace_image_keeps_old_file_on_processing_failure(client, admin_headers):
+    created = client.post("/api/devices", headers=admin_headers,
+                          json={"name": "S1", "type": "switch"})
+    cid = created.json()["id"]
+    uploaded = _upload(client, cid, admin_headers, _make_png()).json()
+    old_path = _upload_path(uploaded["image_url"])
+    assert os.path.exists(old_path)
+
+    r = _upload(client, cid, admin_headers, b"corrupt-bytes", filename="pic.png",
+                content_type="image/png")
+    assert r.status_code == 422
+    assert os.path.exists(old_path), "旧图片不应因新上传失败而丢失"
+    got = client.get(f"/api/devices/{cid}", headers=admin_headers).json()
+    assert got["image_url"] == uploaded["image_url"]
+
+
 def test_delete_image_clears_url_and_file(client, admin_headers):
     created = client.post("/api/devices", headers=admin_headers,
                           json={"name": "S1", "type": "switch"})

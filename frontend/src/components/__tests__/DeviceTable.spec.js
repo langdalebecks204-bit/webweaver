@@ -75,8 +75,9 @@ vi.mock('../../stores/auth', () => ({
 import DeviceTable from '../DeviceTable.vue'
 import ElementPlus from 'element-plus'
 
-function mountTable() {
+function mountTable({ onEdit } = {}) {
   return mount(DeviceTable, {
+    props: { onEdit },
     global: { plugins: [ElementPlus] },
   })
 }
@@ -123,5 +124,15 @@ describe('DeviceTable', () => {
     await flushPromises()
     expect(confirmMock).toHaveBeenCalled()
     expect(removeMock).toHaveBeenCalled()
+  })
+
+  it('编辑按钮触发 onEdit 回调并传入行数据', async () => {
+    const onEdit = vi.fn()
+    const wrapper = mountTable({ onEdit })
+    await flushPromises()
+    const editBtn = wrapper.findAll('button').find((b) => b.text() === '编辑')
+    await editBtn.trigger('click')
+    expect(onEdit).toHaveBeenCalledTimes(1)
+    expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ name: '机房A' }))
   })
 })
