@@ -31,10 +31,31 @@ def get_db():
         db.close()
 
 
+_DEVICE_ADDED_COLUMNS = {
+    "location": "VARCHAR(100)",
+    "image_url": "VARCHAR(255)",
+}
+
+
+def _migrate_schema(db_engine=None) -> None:
+    from sqlalchemy import inspect, text
+
+    db_engine = db_engine or engine
+    inspector = inspect(db_engine)
+    if not inspector.has_table("devices"):
+        return
+    existing = {col["name"] for col in inspector.get_columns("devices")}
+    with db_engine.begin() as conn:
+        for name, ddl in _DEVICE_ADDED_COLUMNS.items():
+            if name not in existing:
+                conn.execute(text(f"ALTER TABLE devices ADD COLUMN {name} {ddl}"))
+
+
 def init_db() -> None:
     from app.models import Device, ExternalTarget, ProbeRecord, Setting, User  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _migrate_schema()
     seed_default_admin()
 
 
