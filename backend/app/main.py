@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Response
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import init_db
@@ -32,6 +33,9 @@ app.include_router(devices.router, prefix="/api/devices", tags=["devices"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
 app.include_router(external.router, prefix="/api/external", tags=["external"])
 app.include_router(backup.router, prefix="/api/backup", tags=["backup"])
+
+os.makedirs(settings.upload_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
 
 
 @app.get("/api/health")

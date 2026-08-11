@@ -31,3 +31,13 @@ export function recheckAllDevices() {
 export function fetchDeviceHistory(id, days) {
   return client.get(`/devices/${id}/history`, { params: { days } })
 }
+
+export function uploadDeviceImage(id, file) {
+  const form = new FormData()
+  form.append('file', file)
+  return client.post(`/devices/${id}/image`, form)
+}
+
+export function deleteDeviceImage(id) {
+  return client.delete(`/devices/${id}/image`)
+}

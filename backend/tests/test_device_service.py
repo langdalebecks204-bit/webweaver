@@ -7,6 +7,7 @@ from app.services.device_service import (
     build_tree,
     create_device,
     delete_device,
+    device_to_dict,
     get_descendant_ids,
     update_device,
 )
@@ -69,6 +70,24 @@ def test_cycle_rejected(db):
     child = _create(db, "child", parent_id=root.id)
     with pytest.raises(ValueError):
         update_device(db, root.id, DeviceUpdate(parent_id=child.id))
+
+
+def test_create_with_location(db):
+    root = _create(db, "root")
+    sw = create_device(
+        db,
+        DeviceCreate(name="sw", type="switch", parent_id=root.id, ip="1.2.3.4", location="机房A/机架1"),
+    )
+    assert sw.location == "机房A/机架1"
+    item = device_to_dict(sw)
+    assert item["location"] == "机房A/机架1"
+
+
+def test_update_location(db):
+    root = _create(db, "root")
+    updated = update_device(db, root.id, DeviceUpdate(location="三楼"))
+    assert updated.location == "三楼"
+    assert device_to_dict(updated)["location"] == "三楼"
 
 
 def test_update_clear_ip(db):

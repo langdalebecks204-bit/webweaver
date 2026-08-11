@@ -4,15 +4,15 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDevicesStore } from '../stores/devices'
 
 const props = defineProps({ node: { type: Object, required: true } })
-const emit = defineEmits(['open-history'])
+const emit = defineEmits(['open-history', 'open-detail'])
 const store = useDevicesStore()
 const dialogVisible = ref(false)
 const editing = ref(null)
-const form = ref({ name: '', type: 'group', ip_address: '', port: null, parent_id: null })
+const form = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', parent_id: null })
 
 function openCreate(parentId) {
   editing.value = null
-  form.value = { name: '', type: 'group', ip_address: '', port: null, parent_id: parentId }
+  form.value = { name: '', type: 'group', ip_address: '', port: null, location: '', parent_id: parentId }
   dialogVisible.value = true
 }
 
@@ -23,6 +23,7 @@ function openEdit() {
     type: props.node.type,
     ip_address: props.node.ip_address || '',
     port: props.node.port,
+    location: props.node.location || '',
     parent_id: props.node.parent_id,
   }
   dialogVisible.value = true
@@ -39,6 +40,7 @@ async function submit() {
     parent_id: parentId,
     ip_address: form.value.ip_address || null,
     port: form.value.port || null,
+    location: form.value.location || null,
   }
   try {
     if (editing.value) {
@@ -73,6 +75,7 @@ function onCommand(command) {
   else if (command === 'edit') openEdit()
   else if (command === 'recheck') store.recheck(props.node.id)
   else if (command === 'delete') remove()
+  else if (command === 'detail') emit('open-detail', props.node)
   else if (command === 'history') {
     if (props.node.ip_address) emit('open-history', props.node)
   }
@@ -127,6 +130,7 @@ const parentCandidates = computed(() => {
         <el-dropdown-item command="add-child">添加子节点</el-dropdown-item>
         <el-dropdown-item command="add-sibling">添加同级</el-dropdown-item>
         <el-dropdown-item command="edit">编辑</el-dropdown-item>
+        <el-dropdown-item command="detail">设备详情</el-dropdown-item>
         <el-dropdown-item v-if="props.node.ip_address" command="history">查看历史</el-dropdown-item>
         <el-dropdown-item command="recheck">立即巡检</el-dropdown-item>
         <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
@@ -163,6 +167,9 @@ const parentCandidates = computed(() => {
       </el-form-item>
       <el-form-item label="TCP 端口">
         <el-input-number v-model="form.port" :min="1" :max="65535" placeholder="可选" />
+      </el-form-item>
+      <el-form-item label="位置">
+        <el-input v-model="form.location" placeholder="如：机房A/机架1（可选）" />
       </el-form-item>
     </el-form>
     <template #footer>

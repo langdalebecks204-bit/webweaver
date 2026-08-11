@@ -184,3 +184,32 @@ describe('DeviceTree 查看历史', () => {
     expect(wrapper.emitted('open-history')).toBeFalsy()
   })
 })
+
+describe('DeviceTree 设备详情', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('右键设备详情发射 open-detail', async () => {
+    const wrapper = mountTree('detail', defaultNode)
+    await wrapper.find('.dd').trigger('click')
+    const emitted = wrapper.emitted('open-detail')
+    expect(emitted).toBeTruthy()
+    expect(emitted[0][0]).toEqual(defaultNode)
+  })
+})
+
+describe('DeviceTree 位置字段', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('编辑时提交位置，空位置转为 null', async () => {
+    updateMock.mockResolvedValue({})
+    const wrapper = mountTree('edit', { ...defaultNode, location: '机房B' })
+    await wrapper.find('.dd').trigger('click')
+    await wrapper.findAll('.dlg button').find((b) => b.text() === '保存').trigger('click')
+    await flushPromises()
+    expect(updateMock).toHaveBeenCalledWith(3, expect.objectContaining({ location: '机房B' }))
+  })
+})

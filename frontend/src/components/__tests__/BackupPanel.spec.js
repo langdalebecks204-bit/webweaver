@@ -84,8 +84,8 @@ describe('BackupPanel 备份与恢复', () => {
     vi.clearAllMocks()
   })
 
-  it('导出默认勾选全部三类', async () => {
-    exportMock.mockResolvedValue({ data: { version: 1 } })
+  it('导出默认勾选全部三类并下载 zip', async () => {
+    exportMock.mockResolvedValue({ data: new Blob(['zip'], { type: 'application/zip' }) })
     const wrapper = mountPanel()
     await flushPromises()
     await buttonByText(wrapper, '导出备份').trigger('click')
@@ -98,7 +98,7 @@ describe('BackupPanel 备份与恢复', () => {
   })
 
   it('取消勾选外网后导出参数排除外网', async () => {
-    exportMock.mockResolvedValue({ data: { version: 1 } })
+    exportMock.mockResolvedValue({ data: new Blob(['zip']) })
     const wrapper = mountPanel()
     await flushPromises()
     await wrapper.findAll('input[type="checkbox"]')[1].setValue(false)
@@ -111,17 +111,16 @@ describe('BackupPanel 备份与恢复', () => {
     })
   })
 
-  it('导入上传文件后调用 import 并刷新数据', async () => {
+  it('导入上传 zip 文件后调用 import 并刷新数据', async () => {
     importMock.mockResolvedValue({})
     const wrapper = mountPanel()
     await flushPromises()
-    const file = new File([JSON.stringify({ version: 1 })], 'backup.json',
-                          { type: 'application/json' })
+    const file = new File(['zip-bytes'], 'backup.zip', { type: 'application/zip' })
     const input = wrapper.find('input.file-input')
     Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
     await input.trigger('change')
     await flushPromises()
-    expect(importMock).toHaveBeenCalledWith({ version: 1 }, 'replace')
+    expect(importMock).toHaveBeenCalledWith(file, 'replace')
     expect(loadMock).toHaveBeenCalled()
     expect(extLoadMock).toHaveBeenCalled()
     expect(successMock).toHaveBeenCalledWith('导入成功')

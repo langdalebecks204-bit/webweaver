@@ -7,6 +7,8 @@ import { useDevicesStore } from '../stores/devices'
 import { useSettingsStore } from '../stores/settings'
 import { useExternalStore } from '../stores/external'
 import DeviceTree from '../components/DeviceTree.vue'
+import DeviceTable from '../components/DeviceTable.vue'
+import DeviceDetail from '../components/DeviceDetail.vue'
 import UsersPanel from '../components/UsersPanel.vue'
 import BackupPanel from '../components/BackupPanel.vue'
 import DeviceHistory from '../components/DeviceHistory.vue'
@@ -18,7 +20,9 @@ const settings = useSettingsStore()
 const external = useExternalStore()
 
 const activeTab = ref('devices')
+const viewMode = ref('tree')
 const historyDevice = ref(null)
+const detailDevice = ref(null)
 const targetDialogVisible = ref(false)
 const targetEditing = ref(null)
 const targetForm = ref({ name: '', ip_address: '', domain: '', port: null })
@@ -158,6 +162,10 @@ async function onExternalCheckAll() {
                 </el-button>
                 <el-button @click="store.load()">刷新</el-button>
                 <el-button type="success" @click="onRecheckAll">立即巡检全部</el-button>
+                <el-radio-group v-model="viewMode" size="small">
+                  <el-radio-button value="tree">树形</el-radio-button>
+                  <el-radio-button value="table">表格</el-radio-button>
+                </el-radio-group>
                 <div v-if="isAdmin" class="interval-setting">
                   <el-input-number
                     v-model="settings.pollIntervalMinutes"
@@ -175,7 +183,7 @@ async function onExternalCheckAll() {
                 </div>
               </div>
             </template>
-            <div class="tree-scroll">
+            <div v-if="viewMode === 'tree'" class="tree-scroll">
               <el-tree
                 :data="store.tree"
                 :props="{ label: 'name', children: 'children' }"
@@ -184,10 +192,15 @@ async function onExternalCheckAll() {
                 :expand-on-click-node="false"
               >
                 <template #default="{ data }">
-                  <DeviceTree :node="data" @open-history="historyDevice = $event" />
+                  <DeviceTree
+                    :node="data"
+                    @open-history="historyDevice = $event"
+                    @open-detail="detailDevice = $event"
+                  />
                 </template>
               </el-tree>
             </div>
+            <DeviceTable v-else />
           </el-card>
         </el-tab-pane>
         <el-tab-pane label="外网" name="external">
@@ -244,6 +257,13 @@ async function onExternalCheckAll() {
         v-if="historyDevice"
         :device="historyDevice"
         @close="historyDevice = null"
+      />
+
+      <DeviceDetail
+        v-if="detailDevice"
+        :device="detailDevice"
+        @close="detailDevice = null"
+        @updated="store.load()"
       />
 
       <el-dialog v-model="targetDialogVisible" :title="targetEditing ? '编辑外网目标' : '新增外网目标'">

@@ -101,8 +101,20 @@ function mountView() {
     global: {
       stubs: {
         DeviceTree: { template: '<div class="device-tree-stub" />' },
+        DeviceTable: { template: '<div class="device-table-stub" />' },
+        DeviceDetail: { template: '<div class="device-detail-stub" />' },
         UsersPanel: { template: '<div class="users-panel-stub" />' },
         BackupPanel: { template: '<div class="backup-panel-stub" />' },
+        'el-radio-group': {
+          props: ['modelValue'],
+          emits: ['update:modelValue'],
+          template: '<div class="view-switch"><slot /></div>',
+        },
+        'el-radio-button': {
+          props: ['value'],
+          emits: ['click'],
+          template: '<button class="mode-btn" @click="$emit(\'click\')">{{ $attrs.label }}</button>',
+        },
         'el-container': { template: '<div><slot /></div>' },
         'el-header': { template: '<header><slot /></header>' },
         'el-main': { template: '<main><slot /></main>' },
@@ -292,8 +304,7 @@ describe('MainView 外网页签', () => {
   })
 })
 
-describe('MainView 管理页签', () => {
-  beforeEach(() => {
+describe('MainView 管理页签', () => {  beforeEach(() => {
     vi.clearAllMocks()
   })
 
@@ -311,5 +322,23 @@ describe('MainView 管理页签', () => {
     await flushPromises()
     expect(wrapper.find('[data-label="用户管理"]').exists()).toBe(false)
     expect(wrapper.find('[data-label="备份与恢复"]').exists()).toBe(false)
+  })
+})
+
+describe('MainView 树形/表格切换', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('默认树形视图，切换后显示表格', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('.device-tree-stub').exists()).toBe(true)
+    expect(wrapper.find('.device-table-stub').exists()).toBe(false)
+    const switchEl = wrapper.findComponent('.view-switch')
+    switchEl.vm.$emit('update:modelValue', 'table')
+    await flushPromises()
+    expect(wrapper.find('.device-tree-stub').exists()).toBe(false)
+    expect(wrapper.find('.device-table-stub').exists()).toBe(true)
   })
 })

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
@@ -17,6 +17,7 @@ from app.services.device_service import (
     get_descendant_ids,
     update_device as update_device_service,
 )
+from app.services.image_service import delete_image_file, upload_image
 
 router = APIRouter()
 
@@ -134,6 +135,35 @@ def delete_device(
     _get_or_404(db, device_id)
     deleted = delete_device_service(db, device_id)
     return {"deleted": deleted}
+
+
+@router.post("/{device_id}/image", status_code=200)
+def upload_device_image(
+    device_id: int,
+    file: UploadFile,
+    db: Session = Depends(get_db),
+    _: object = Depends(require_admin),
+):
+    device = _get_or_404(db, device_id)
+    delete_image_file(device_id)
+    device.image_url = upload_image(device_id, file)
+    db.commit()
+    db.refresh(device)
+    return device_to_dict(device)
+
+
+@router.delete("/{device_id}/image")
+def delete_device_image(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: object = Depends(require_admin),
+):
+    device = _get_or_404(db, device_id)
+    delete_image_file(device_id)
+    device.image_url = None
+    db.commit()
+    db.refresh(device)
+    return device_to_dict(device)
 
 
 @router.post("/{device_id}/recheck")

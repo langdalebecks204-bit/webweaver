@@ -10,6 +10,7 @@ RUN npm run build
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 \
     WEAVER_DB_URL=sqlite:////data/weaver.db \
+    WEAVER_UPLOAD_DIR=/data/uploads \
     WEAVER_ENABLE_SCHEDULER=true
 WORKDIR /app
 COPY --from=frontend-build /build/dist /app/frontend/dist

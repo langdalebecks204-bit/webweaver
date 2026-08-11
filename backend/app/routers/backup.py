@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -17,6 +18,7 @@ def export_backup_endpoint(
     include_devices: bool | None = None,
     include_external: bool | None = None,
     include_settings: bool | None = None,
+    include_images: bool | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
@@ -26,7 +28,13 @@ def export_backup_endpoint(
         include_devices = bool(include_devices)
         include_external = bool(include_external)
         include_settings = bool(include_settings)
-    return export_backup(db, include_devices, include_external, include_settings)
+    include_images = True if include_images is None else bool(include_images)
+    content = export_backup(db, include_devices, include_external, include_settings, include_images)
+    return Response(
+        content=content,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="weaver-backup.zip"'},
+    )
 
 
 @router.post("/import")
@@ -36,12 +44,11 @@ async def import_backup_endpoint(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
+    raw = await request.body()
+    if not raw:
+        raise HTTPException(status_code=422, detail="empty body")
     try:
-        data = await request.json()
-    except Exception:
-        raise HTTPException(status_code=422, detail="invalid JSON body")
-    try:
-        import_backup(db, data, mode)
+        import_backup(db, raw, mode)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     reschedule_interval(get_poll_interval(db))

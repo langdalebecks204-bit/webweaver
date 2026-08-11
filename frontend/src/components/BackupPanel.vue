@@ -21,17 +21,17 @@ const importMode = ref('replace')
 
 async function onExport() {
   try {
-    const { data } = await exportBackup({
+    const response = await exportBackup({
       include_devices: includeDevices.value,
       include_external: includeExternal.value,
       include_settings: includeSettings.value,
     })
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const blob = new Blob([response.data], { type: 'application/zip' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
     a.href = url
-    a.download = `weaver-backup-${stamp}.json`
+    a.download = `weaver-backup-${stamp}.zip`
     a.click()
     URL.revokeObjectURL(url)
   } catch (error) {
@@ -41,9 +41,7 @@ async function onExport() {
 
 async function onImport(file) {
   try {
-    const text = await file.text()
-    const data = JSON.parse(text)
-    await importBackup(data, importMode.value)
+    await importBackup(file, importMode.value)
     await Promise.all([devices.load(), external.load()])
     if (auth.user?.role === 'admin') await settings.loadInterval()
     ElMessage.success('导入成功')
@@ -85,7 +83,7 @@ async function onReset() {
     <el-card class="section">
       <template #header>导出备份</template>
       <div class="checks">
-        <label><input type="checkbox" v-model="includeDevices" /> 设备</label>
+        <label><input type="checkbox" v-model="includeDevices" /> 设备（含图片）</label>
         <label><input type="checkbox" v-model="includeExternal" /> 外网目标</label>
         <label><input type="checkbox" v-model="includeSettings" /> 巡检间隔</label>
       </div>
@@ -98,7 +96,7 @@ async function onReset() {
         <label><input type="radio" value="replace" v-model="importMode" /> 替换</label>
         <label><input type="radio" value="merge" v-model="importMode" /> 合并</label>
       </div>
-      <input class="file-input" type="file" accept="application/json,.json" @change="onFileChange" />
+      <input class="file-input" type="file" accept=".zip,.json" @change="onFileChange" />
     </el-card>
 
     <el-card class="section danger">

@@ -13,6 +13,8 @@ def device_to_dict(d: Device) -> dict:
         "type": d.type,
         "ip_address": d.ip_address,
         "port": d.port,
+        "location": d.location,
+        "image_url": d.image_url,
         "status": d.status,
         "latency_ms": d.latency_ms,
         "last_check": d.last_check,
@@ -117,4 +119,8 @@ def delete_device(db: Session, device_id: int) -> list[int]:
         db.expunge(o)
     db.query(Device).where(Device.id.in_(ids)).delete(synchronize_session=False)
     db.commit()
+    from app.services.image_service import delete_image_file
+
+    for did in ids:
+        delete_image_file(did)
     return ids

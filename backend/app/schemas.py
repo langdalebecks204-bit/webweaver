@@ -27,6 +27,7 @@ class DeviceBase(BaseModel):
     type: str = Field(default="group", pattern="^(group|server|switch|terminal)$")
     ip_address: str | None = None
     port: int | None = Field(default=None, ge=1, le=65535)
+    location: str | None = Field(default=None, max_length=100)
     order_index: int = 0
 
 
@@ -39,6 +40,7 @@ class DeviceUpdate(BaseModel):
     type: str | None = Field(default=None, pattern="^(group|server|switch|terminal)$")
     ip_address: str | None = None
     port: int | None = Field(default=None, ge=1, le=65535)
+    location: str | None = Field(default=None, max_length=100)
     parent_id: int | None = None
     order_index: int | None = None
 
@@ -51,6 +53,7 @@ class DeviceOut(DeviceBase):
     status: str
     latency_ms: int | None
     last_check: datetime | None
+    image_url: str | None
     children: list["DeviceOut"] = []
 
 

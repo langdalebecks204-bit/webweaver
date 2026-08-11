@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     db_url: str = "sqlite:///./weaver.db"
+    upload_dir: str = "./uploads"
     jwt_secret: str = "dev-secret-change-me"
     token_expire_minutes: int = 480
     poll_interval_minutes: int = 5
