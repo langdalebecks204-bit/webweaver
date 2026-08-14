@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { fetchDeviceHistory } from '../api/devices'
 import { uploadDeviceImage, deleteDeviceImage } from '../api/devices'
 import { useAuthStore } from '../stores/auth'
+import { typeLabel } from '../utils/deviceTypes'
 
 const props = defineProps({ device: { type: Object, required: true } })
 const emit = defineEmits(['close'])
@@ -133,7 +134,7 @@ async function onRemoveImage() {
           </div>
         </div>
         <ul class="info">
-          <li><span class="k">类型</span>{{ props.device.type }}</li>
+          <li><span class="k">类型</span>{{ typeLabel(props.device.type) }}</li>
           <li><span class="k">IP 地址</span>{{ props.device.ip_address || '-' }}</li>
           <li><span class="k">端口</span>{{ props.device.port ?? '-' }}</li>
           <li><span class="k">位置</span>{{ props.device.location || '-' }}</li>

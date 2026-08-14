@@ -50,6 +50,15 @@ vi.mock('../../stores/devices', () => ({
   }),
 }))
 
+vi.mock('../../stores/settings', () => ({
+  useSettingsStore: () => ({
+    builtinTypes: ['group', 'server', 'switch', 'terminal', 'camera', 'nvr', 'router', 'firewall', 'ap', 'printer', 'nas', 'ups'],
+    customTypes: ['nas2'],
+    typesLoaded: true,
+    loadTypes: vi.fn(),
+  }),
+}))
+
 import DeviceTree from '../DeviceTree.vue'
 
 const defaultNode = {
@@ -211,5 +220,22 @@ describe('DeviceTree 位置字段', () => {
     await wrapper.findAll('.dlg button').find((b) => b.text() === '保存').trigger('click')
     await flushPromises()
     expect(updateMock).toHaveBeenCalledWith(3, expect.objectContaining({ location: '机房B' }))
+  })
+})
+
+describe('DeviceTree 类型下拉', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('下拉包含内置类型与自定义类型', async () => {
+    const wrapper = mountTree('add-child')
+    await wrapper.find('.dd').trigger('click')
+    const typeSelect = wrapper.findAll('.dlg select').at(0)
+    const values = typeSelect.findAll('option').map((o) => o.attributes('value'))
+    expect(values).toContain('camera')
+    expect(values).toContain('nvr')
+    expect(values).toContain('nas2')
+    expect(values).toContain('group')
   })
 })

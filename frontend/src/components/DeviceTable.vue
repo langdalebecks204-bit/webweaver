@@ -4,6 +4,7 @@ import { useDevicesStore } from '../stores/devices'
 import { useAuthStore } from '../stores/auth'
 import { filterDevices, flattenTree } from '../stores/devicesHelpers'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { typeLabel } from '../utils/deviceTypes'
 
 const store = useDevicesStore()
 const auth = useAuthStore()
@@ -76,7 +77,7 @@ async function onRecheck(d) {
     <el-table :data="filteredDevices" size="small">
       <el-table-column prop="name" label="名称" min-width="140" />
       <el-table-column prop="type" label="类型" width="80">
-        <template #default="{ row }">{{ row.type }}</template>
+        <template #default="{ row }">{{ typeLabel(row.type) }}</template>
       </el-table-column>
       <el-table-column prop="parentName" label="所属分组" min-width="120">
         <template #default="{ row }">{{ row.parentName || '-' }}</template>

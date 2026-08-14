@@ -101,6 +101,10 @@ vi.mock('../../stores/settings', () => ({
     pollIntervalMinutes: 5,
     loadInterval: loadIntervalMock,
     saveInterval: saveIntervalMock,
+    builtinTypes: ['group', 'server', 'switch', 'terminal', 'camera', 'nvr', 'router', 'firewall', 'ap', 'printer', 'nas', 'ups'],
+    customTypes: [],
+    typesLoaded: true,
+    loadTypes: vi.fn(),
   }),
 }))
 

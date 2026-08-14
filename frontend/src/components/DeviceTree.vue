@@ -1,11 +1,14 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDevicesStore } from '../stores/devices'
+import { useSettingsStore } from '../stores/settings'
+import { allTypeOptions, typeIcon } from '../utils/deviceTypes'
 
 const props = defineProps({ node: { type: Object, required: true } })
 const emit = defineEmits(['open-history', 'open-detail'])
 const store = useDevicesStore()
+const settingsStore = useSettingsStore()
 const dialogVisible = ref(false)
 const editing = ref(null)
 const form = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', parent_id: null })
@@ -107,16 +110,21 @@ const parentCandidates = computed(() => {
   walk(store.tree, 0)
   return result
 })
+
+const typeOptions = computed(() =>
+  allTypeOptions(settingsStore.builtinTypes, settingsStore.customTypes)
+)
+
+onMounted(() => {
+  if (!settingsStore.typesLoaded) settingsStore.loadTypes()
+})
 </script>
 
 <template>
   <el-dropdown trigger="contextmenu" @command="onCommand">
     <div class="node">
       <el-icon class="type-icon">
-        <component
-          :is="props.node.type === 'group' ? 'Folder'
-            : props.node.type === 'switch' ? 'Connection' : 'Monitor'"
-        />
+        <component :is="typeIcon(props.node.type, settingsStore.customTypes)" />
       </el-icon>
       <span class="status-dot" :class="props.node.status" />
       <span class="node-name">{{ props.node.name }}</span>
@@ -145,10 +153,12 @@ const parentCandidates = computed(() => {
       </el-form-item>
       <el-form-item label="类型">
         <el-select v-model="form.type" style="width: 100%">
-          <el-option label="分组" value="group" />
-          <el-option label="服务器" value="server" />
-          <el-option label="交换机" value="switch" />
-          <el-option label="终端" value="terminal" />
+          <el-option
+            v-for="opt in typeOptions"
+            :key="opt.value"
+            :label="opt.label"
+            :value="opt.value"
+          />
         </el-select>
       </el-form-item>
       <el-form-item label="上级分组">

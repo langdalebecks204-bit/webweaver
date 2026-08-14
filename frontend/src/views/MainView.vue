@@ -12,6 +12,7 @@ import DeviceDetail from '../components/DeviceDetail.vue'
 import UsersPanel from '../components/UsersPanel.vue'
 import BackupPanel from '../components/BackupPanel.vue'
 import DeviceHistory from '../components/DeviceHistory.vue'
+import { allTypeOptions } from '../utils/deviceTypes'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -32,6 +33,8 @@ const deviceForm = ref({ name: '', type: 'group', ip_address: '', port: null, lo
 const deviceCandidates = ref([])
 const isAdmin = computed(() => auth.user?.role === 'admin')
 
+const typeOptions = computed(() => allTypeOptions(settings.builtinTypes, settings.customTypes))
+
 let refreshTimer
 
 onMounted(async () => {
@@ -41,6 +44,7 @@ onMounted(async () => {
   if (auth.user?.role === 'admin') {
     await settings.loadInterval()
   }
+  await settings.loadTypes()
   refreshTimer = setInterval(() => {
     store.load()
     external.load()
@@ -348,10 +352,12 @@ async function onSaveDevice() {
           </el-form-item>
           <el-form-item label="类型">
             <el-select v-model="deviceForm.type" style="width: 100%">
-              <el-option label="分组" value="group" />
-              <el-option label="服务器" value="server" />
-              <el-option label="交换机" value="switch" />
-              <el-option label="终端" value="terminal" />
+              <el-option
+                v-for="opt in typeOptions"
+                :key="opt.value"
+                :label="opt.label"
+                :value="opt.value"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="IP 地址">
