@@ -2,19 +2,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-const { removeMock, recheckMock, successMock, errorMock, confirmMock } = vi.hoisted(() => ({
+const { removeMock, recheckMock, successMock, errorMock, confirmMock, warningMock } = vi.hoisted(() => ({
   removeMock: vi.fn(),
   recheckMock: vi.fn(),
   successMock: vi.fn(),
   errorMock: vi.fn(),
   confirmMock: vi.fn(),
+  warningMock: vi.fn(),
 }))
 
 vi.mock('element-plus', async (importOriginal) => {
   const actual = await importOriginal()
   return {
     ...actual,
-    ElMessage: { success: successMock, error: errorMock },
+    ElMessage: { success: successMock, error: errorMock, warning: warningMock },
     ElMessageBox: { confirm: confirmMock },
   }
 })
@@ -134,5 +135,33 @@ describe('DeviceTable', () => {
     await editBtn.trigger('click')
     expect(onEdit).toHaveBeenCalledTimes(1)
     expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ name: '机房A' }))
+  })
+})
+
+describe('DeviceTable 导出 CSV', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('有数据时导出并提示条数', async () => {
+    const wrapper = mountTable()
+    await flushPromises()
+    const btn = wrapper.findAll('button').find((b) => b.text() === '导出 CSV')
+    expect(btn).toBeTruthy()
+    await btn.trigger('click')
+    await flushPromises()
+    expect(successMock).toHaveBeenCalledWith(expect.stringContaining('已导出'))
+  })
+
+  it('无数据时提示无数据可导出', async () => {
+    const wrapper = mountTable()
+    await flushPromises()
+    const input = wrapper.find('input[placeholder*="搜索"]')
+    await input.setValue('完全不存在的关键词xyz')
+    await flushPromises()
+    const btn = wrapper.findAll('button').find((b) => b.text() === '导出 CSV')
+    await btn.trigger('click')
+    await flushPromises()
+    expect(warningMock).toHaveBeenCalledWith('无数据可导出')
   })
 })

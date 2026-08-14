@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth'
 import { filterDevices, flattenTree } from '../stores/devicesHelpers'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { typeLabel } from '../utils/deviceTypes'
+import { downloadCsv, toCsv } from '../utils/csv'
 
 const store = useDevicesStore()
 const auth = useAuthStore()
@@ -56,6 +57,29 @@ async function onRecheck(d) {
     ElMessage.error(error.response?.data?.detail || '巡检失败')
   }
 }
+
+const csvColumns = [
+  { key: 'name', header: '名称' },
+  { key: 'type', header: '类型', format: typeLabel },
+  { key: 'parentName', header: '所属分组', format: (v) => v || '' },
+  { key: 'ip_address', header: 'IP', format: (v) => v || '' },
+  { key: 'port', header: '端口', format: (v) => (v ?? '') },
+  { key: 'location', header: '位置', format: (v) => v || '' },
+  { key: 'status', header: '状态', format: statusText },
+  { key: 'latency_ms', header: '延时', format: (v) => (v != null ? `${v} ms` : '') },
+  { key: 'last_check', header: '最近巡检', format: (v) => (v ? new Date(v).toLocaleString() : '') },
+]
+
+function onExport() {
+  const rows = filteredDevices.value
+  if (!rows.length) {
+    ElMessage.warning('无数据可导出')
+    return
+  }
+  const csv = toCsv(rows, csvColumns)
+  downloadCsv(`设备资产_${new Date().toISOString().slice(0, 10)}.csv`, csv)
+  ElMessage.success(`已导出 ${rows.length} 条记录`)
+}
 </script>
 
 <template>
@@ -73,6 +97,7 @@ async function onRecheck(d) {
         <el-option label="离线" value="offline" />
         <el-option label="未知" value="unknown" />
       </el-select>
+      <el-button size="small" @click="onExport">导出 CSV</el-button>
     </div>
     <el-table :data="filteredDevices" size="small">
       <el-table-column prop="name" label="名称" min-width="140" />
