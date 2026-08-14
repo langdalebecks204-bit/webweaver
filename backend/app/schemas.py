@@ -24,7 +24,7 @@ class UserOut(BaseModel):
 
 class DeviceBase(BaseModel):
     name: str = Field(min_length=1, max_length=100)
-    type: str = Field(default="group", pattern="^(group|server|switch|terminal)$")
+    type: str = Field(default="group", min_length=1, max_length=20)
     ip_address: str | None = None
     port: int | None = Field(default=None, ge=1, le=65535)
     location: str | None = Field(default=None, max_length=100)
@@ -37,7 +37,7 @@ class DeviceCreate(DeviceBase):
 
 class DeviceUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
-    type: str | None = Field(default=None, pattern="^(group|server|switch|terminal)$")
+    type: str | None = Field(default=None, min_length=1, max_length=20)
     ip_address: str | None = None
     port: int | None = Field(default=None, ge=1, le=65535)
     location: str | None = Field(default=None, max_length=100)

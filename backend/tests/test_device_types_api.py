@@ -73,6 +73,26 @@ def test_delete_builtin_rejected(client, admin_headers):
     assert r.status_code in (400, 422)
 
 
+def test_create_device_with_custom_type(client, admin_headers):
+    client.post("/api/settings/device-types", headers=admin_headers, json={"name": "nas2"})
+    r = client.post(
+        "/api/devices",
+        headers=admin_headers,
+        json={"name": "NAS节点", "type": "nas2", "ip_address": "10.2.2.2"},
+    )
+    assert r.status_code == 201
+    assert r.json()["type"] == "nas2"
+
+
+def test_create_device_with_unknown_type_rejected(client, admin_headers):
+    r = client.post(
+        "/api/devices",
+        headers=admin_headers,
+        json={"name": "未知类型节点", "type": "bogus"},
+    )
+    assert r.status_code in (409, 422)
+
+
 def test_device_types_admin_only(client, admin_headers):
     vh = _mk_viewer(client)
     assert client.post(

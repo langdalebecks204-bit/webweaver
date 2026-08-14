@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Device
 from app.schemas import DeviceCreate, DeviceUpdate
+from app.services.device_types import is_valid_type
 
 
 def device_to_dict(d: Device) -> dict:
@@ -61,6 +62,8 @@ def build_subtree(db: Session, root_id: int) -> dict:
 
 
 def create_device(db: Session, data: DeviceCreate) -> Device:
+    if not is_valid_type(db, data.type):
+        raise ValueError(f"invalid device type: {data.type}")
     if data.parent_id is not None:
         parent = db.get(Device, data.parent_id)
         if parent is None:
@@ -83,6 +86,8 @@ def update_device(db: Session, device_id: int, data: DeviceUpdate) -> Device:
         raise KeyError("device not found")
 
     changes = data.model_dump(exclude_unset=True)
+    if "type" in changes and not is_valid_type(db, changes["type"]):
+        raise ValueError(f"invalid device type: {changes['type']}")
     new_parent_id = changes.get("parent_id", device.parent_id)
     new_name = changes.get("name", device.name)
 
