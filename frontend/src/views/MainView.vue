@@ -12,7 +12,7 @@ import DeviceDetail from '../components/DeviceDetail.vue'
 import UsersPanel from '../components/UsersPanel.vue'
 import BackupPanel from '../components/BackupPanel.vue'
 import DeviceHistory from '../components/DeviceHistory.vue'
-import { allTypeOptions } from '../utils/deviceTypes'
+import { allTypeOptions, typeLabel } from '../utils/deviceTypes'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -58,6 +58,38 @@ onUnmounted(() => {
 function onLogout() {
   auth.logout()
   router.push('/login')
+}
+
+const newTypeName = ref('')
+
+async function onAddCustomType() {
+  const name = (newTypeName.value || '').trim()
+  if (!name) return
+  try {
+    await settings.addType(name)
+    newTypeName.value = ''
+    ElMessage.success('已添加')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || '添加失败')
+  }
+}
+
+async function onRemoveCustomType(name) {
+  try {
+    await ElMessageBox.confirm(
+      `删除类型"${name}"后，该类型下的设备将改为"终端"，继续？`,
+      '删除类型',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  try {
+    await settings.removeType(name)
+    ElMessage.success('已删除')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || '删除失败')
+  }
 }
 
 async function onCreateRoot() {
@@ -239,6 +271,34 @@ async function onSaveDevice() {
                   <el-tag type="danger">离线 {{ store.stats.offline }}</el-tag>
                   <el-tag type="info">未知 {{ store.stats.unknown }}</el-tag>
                 </div>
+                <div v-if="isAdmin" class="type-manage">
+                  <span>设备类型：</span>
+                  <el-tag
+                    v-for="t in settings.builtinTypes"
+                    :key="t"
+                    size="small"
+                    class="type-tag"
+                  >
+                    {{ typeLabel(t) }}（内置）
+                  </el-tag>
+                  <el-tag
+                    v-for="t in settings.customTypes"
+                    :key="t"
+                    size="small"
+                    closable
+                    @close="onRemoveCustomType(t)"
+                    class="type-tag"
+                  >
+                    {{ t }}
+                  </el-tag>
+                  <el-input
+                    v-model="newTypeName"
+                    placeholder="自定义类型名"
+                    size="small"
+                    class="type-input"
+                  />
+                  <el-button size="small" type="primary" @click="onAddCustomType">添加</el-button>
+                </div>
               </div>
             </template>
             <div v-if="viewMode === 'tree'" class="tree-scroll">
@@ -407,6 +467,18 @@ async function onSaveDevice() {
   margin-left: auto;
   display: flex;
   gap: 8px;
+}
+.type-manage {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.type-tag {
+  margin-right: 4px;
+}
+.type-input {
+  width: 140px;
 }
 .tree-scroll {
   overflow-x: auto;

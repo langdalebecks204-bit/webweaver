@@ -21,6 +21,9 @@ const {
   extUpdateMock,
   extRemoveMock,
   extCheckAllMock,
+  addTypeMock,
+  removeTypeMock,
+  loadTypesMock,
 } = vi.hoisted(() => ({
   createMock: vi.fn(),
   loadMock: vi.fn(),
@@ -40,6 +43,9 @@ const {
   extUpdateMock: vi.fn(),
   extRemoveMock: vi.fn(),
   extCheckAllMock: vi.fn(),
+  addTypeMock: vi.fn(),
+  removeTypeMock: vi.fn(),
+  loadTypesMock: vi.fn(),
 }))
 
 const authState = vi.hoisted(() => ({ role: 'admin' }))
@@ -102,9 +108,11 @@ vi.mock('../../stores/settings', () => ({
     loadInterval: loadIntervalMock,
     saveInterval: saveIntervalMock,
     builtinTypes: ['group', 'server', 'switch', 'terminal', 'camera', 'nvr', 'router', 'firewall', 'ap', 'printer', 'nas', 'ups'],
-    customTypes: [],
+    customTypes: ['nas2'],
     typesLoaded: true,
-    loadTypes: vi.fn(),
+    loadTypes: loadTypesMock,
+    addType: addTypeMock,
+    removeType: removeTypeMock,
   }),
 }))
 
@@ -153,7 +161,11 @@ function mountView() {
         'el-header': { template: '<header><slot /></header>' },
         'el-main': { template: '<main><slot /></main>' },
         'el-card': { template: '<div><slot name="header" /><slot /></div>' },
-        'el-tag': { template: '<span><slot /></span>' },
+        'el-tag': {
+          inheritAttrs: false,
+          emits: ['close'],
+          template: '<span data-tag :type="$attrs.type" :size="$attrs.size" :class="$attrs.class"><slot /><button v-if="$attrs.closable !== undefined" class="tag-close" @click="$emit(\'close\')">移除</button></span>',
+        },
         'el-tree': { template: '<div><slot /></div>' },
         'el-tabs': { template: '<div class="tabs"><slot /></div>' },
         'el-tab-pane': { template: '<div :data-label="$attrs.label"><slot /></div>' },
@@ -374,6 +386,47 @@ describe('MainView 树形/表格切换', () => {
     await flushPromises()
     expect(wrapper.find('.device-tree-stub').exists()).toBe(false)
     expect(wrapper.find('.device-table-stub').exists()).toBe(true)
+  })
+})
+
+describe('MainView 设备类型管理', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('admin 显示类型管理，添加自定义类型', async () => {
+    authState.role = 'admin'
+    addTypeMock.mockResolvedValue()
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).toContain('设备类型')
+    const addInput = wrapper.findAll('input.t-input').find((i) => i.attributes('placeholder')?.includes('自定义类型名'))
+    await addInput.setValue('nas2')
+    const addBtn = wrapper.findAll('button').find((b) => b.text() === '添加')
+    await addBtn.trigger('click')
+    await flushPromises()
+    expect(addTypeMock).toHaveBeenCalledWith('nas2')
+  })
+
+  it('删除自定义类型需确认', async () => {
+    authState.role = 'admin'
+    removeTypeMock.mockResolvedValue()
+    confirmMock.mockResolvedValue()
+    const wrapper = mountView()
+    await flushPromises()
+    const removeBtn = wrapper.findAll('button').find((b) => b.text() === '移除')
+    expect(removeBtn).toBeTruthy()
+    await removeBtn.trigger('click')
+    await flushPromises()
+    expect(confirmMock).toHaveBeenCalled()
+    expect(removeTypeMock).toHaveBeenCalledWith('nas2')
+  })
+
+  it('viewer 不显示类型管理', async () => {
+    authState.role = 'viewer'
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('设备类型')
   })
 })
 
