@@ -261,6 +261,47 @@ def test_import_legacy_json_still_works(client, admin_headers):
     assert names == {"root"}
 
 
+def test_import_backup_with_custom_type(client, admin_headers):
+    client.post("/api/settings/device-types", headers=admin_headers, json={"name": "nas2"})
+    payload = {
+        "version": 2,
+        "settings": [{"key": "custom_device_types", "value": '["nas2"]'}],
+        "devices": [
+            {
+                "id": 1,
+                "name": "NAS节点",
+                "type": "nas2",
+                "parent_id": None,
+                "order_index": 0,
+            }
+        ],
+    }
+    r = client.post("/api/backup/import?mode=replace", headers=admin_headers, json=payload)
+    assert r.status_code == 200
+    devs = client.get("/api/devices", headers=admin_headers).json()
+    assert any(d["name"] == "NAS节点" and d["type"] == "nas2" for d in devs)
+
+
+def test_import_backup_with_custom_type_in_settings(client, admin_headers):
+    payload = {
+        "version": 2,
+        "settings": [{"key": "custom_device_types", "value": '["nas2"]'}],
+        "devices": [
+            {
+                "id": 1,
+                "name": "NAS节点",
+                "type": "nas2",
+                "parent_id": None,
+                "order_index": 0,
+            }
+        ],
+    }
+    r = client.post("/api/backup/import?mode=replace", headers=admin_headers, json=payload)
+    assert r.status_code == 200
+    devs = client.get("/api/devices", headers=admin_headers).json()
+    assert any(d["name"] == "NAS节点" and d["type"] == "nas2" for d in devs)
+
+
 def test_reset_clears_uploads(client, admin_headers):
     created = client.post("/api/devices", headers=admin_headers,
                           json={"name": "sw1", "type": "switch"})

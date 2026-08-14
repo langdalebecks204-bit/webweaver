@@ -13,7 +13,12 @@ from app.models import Device, ExternalTarget, Setting, User, utcnow
 from app.services.image_service import clear_all_images
 
 BACKUP_VERSION = 2
-_VALID_TYPES = {"group", "server", "switch", "terminal"}
+
+
+def _valid_types(db: Session) -> set[str]:
+    from app.services.device_types import BUILTIN_TYPES, get_custom_types
+
+    return set(BUILTIN_TYPES) | set(get_custom_types(db))
 
 
 def export_backup(
@@ -126,9 +131,9 @@ def _import_replace(db: Session, data: dict, images: dict[str, bytes]) -> None:
     db.query(ExternalTarget).delete()
     db.query(Setting).delete()
     clear_all_images()
+    _import_settings(db, data.get("settings", []))
     _import_devices(db, data.get("devices", []), merge=False, images=images)
     _import_external(db, data.get("external", []), merge=False)
-    _import_settings(db, data.get("settings", []))
 
 
 def _import_merge(db: Session, data: dict, images: dict[str, bytes]) -> None:
@@ -146,7 +151,7 @@ def _import_devices(
         if not name:
             raise ValueError("device name is required")
         dev_type = item.get("type") or "group"
-        if dev_type not in _VALID_TYPES:
+        if dev_type not in _valid_types(db):
             raise ValueError(f"invalid device type: {dev_type}")
         parent_id = id_map.get(item.get("parent_id"))
         if merge:
@@ -217,6 +222,7 @@ def _import_settings(db: Session, items) -> None:
             db.add(Setting(key=key, value=value))
         else:
             existing.value = value
+    db.flush()
 
 
 def reset_all(db: Session) -> None:
