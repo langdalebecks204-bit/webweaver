@@ -138,37 +138,17 @@ describe('DeviceTable', () => {
   })
 })
 
-describe('DeviceTable 导出 CSV', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('有数据时导出并提示条数', async () => {
-    const wrapper = mountTable()
-    await flushPromises()
-    const btn = wrapper.findAll('button').find((b) => b.text() === '导出 CSV')
-    expect(btn).toBeTruthy()
-    await btn.trigger('click')
-    await flushPromises()
-    expect(successMock).toHaveBeenCalledWith(expect.stringContaining('已导出'))
-  })
-
-  it('无数据时提示无数据可导出', async () => {
-    const wrapper = mountTable()
-    await flushPromises()
-    const input = wrapper.find('input[placeholder*="搜索"]')
-    await input.setValue('完全不存在的关键词xyz')
-    await flushPromises()
-    const btn = wrapper.findAll('button').find((b) => b.text() === '导出 CSV')
-    await btn.trigger('click')
-    await flushPromises()
-    expect(warningMock).toHaveBeenCalledWith('无数据可导出')
-  })
-})
-
 describe('DeviceTable 导出 ZIP', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('工具栏只有导出 ZIP 按钮，无导出 CSV 按钮', async () => {
+    const wrapper = mountTable()
+    await flushPromises()
+    const btns = wrapper.findAll('button').map((b) => b.text())
+    expect(btns).toContain('导出 ZIP')
+    expect(btns).not.toContain('导出 CSV')
   })
 
   it('有数据时导出并提示条数', async () => {

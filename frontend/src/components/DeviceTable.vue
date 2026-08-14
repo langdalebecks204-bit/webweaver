@@ -5,7 +5,7 @@ import { useAuthStore } from '../stores/auth'
 import { filterDevices, flattenTree } from '../stores/devicesHelpers'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { typeLabel } from '../utils/deviceTypes'
-import { downloadCsv, toCsv } from '../utils/csv'
+import { downloadCsv } from '../utils/csv'
 import { buildExportZip } from '../utils/exportZip'
 
 const store = useDevicesStore()
@@ -83,23 +83,12 @@ async function onExportZip() {
     return
   }
   try {
-    const blob = await buildExportZip({ rows, csvColumns: zipColumns })
+    const blob = await buildExportZip({ rows, csvColumns: zipColumns, htmlColumns: zipColumns })
     downloadCsv(`设备资产_${new Date().toISOString().slice(0, 10)}.zip`, blob)
     ElMessage.success(`已导出 ${rows.length} 条记录`)
   } catch {
     ElMessage.error('导出失败')
   }
-}
-
-function onExport() {
-  const rows = filteredDevices.value
-  if (!rows.length) {
-    ElMessage.warning('无数据可导出')
-    return
-  }
-  const csv = toCsv(rows, csvColumns)
-  downloadCsv(`设备资产_${new Date().toISOString().slice(0, 10)}.csv`, csv)
-  ElMessage.success(`已导出 ${rows.length} 条记录`)
 }
 </script>
 
@@ -118,7 +107,6 @@ function onExport() {
         <el-option label="离线" value="offline" />
         <el-option label="未知" value="unknown" />
       </el-select>
-      <el-button size="small" @click="onExport">导出 CSV</el-button>
       <el-button size="small" @click="onExportZip">导出 ZIP</el-button>
     </div>
     <el-table :data="filteredDevices" size="small">
