@@ -165,3 +165,32 @@ describe('DeviceTable 导出 CSV', () => {
     expect(warningMock).toHaveBeenCalledWith('无数据可导出')
   })
 })
+
+describe('DeviceTable 导出 ZIP', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('有数据时导出并提示条数', async () => {
+    const wrapper = mountTable()
+    await flushPromises()
+    const btn = wrapper.findAll('button').find((b) => b.text() === '导出 ZIP')
+    expect(btn).toBeTruthy()
+    await btn.trigger('click')
+    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
+    expect(successMock).toHaveBeenCalledWith(expect.stringContaining('已导出'))
+  })
+
+  it('无数据时提示无数据可导出', async () => {
+    const wrapper = mountTable()
+    await flushPromises()
+    const input = wrapper.find('input[placeholder*="搜索"]')
+    await input.setValue('完全不存在的关键词xyz')
+    await flushPromises()
+    const btn = wrapper.findAll('button').find((b) => b.text() === '导出 ZIP')
+    await btn.trigger('click')
+    await flushPromises()
+    expect(warningMock).toHaveBeenCalledWith('无数据可导出')
+  })
+})
