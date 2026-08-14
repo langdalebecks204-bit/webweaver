@@ -135,7 +135,7 @@ export async function buildExportZip({ rows, csvColumns, fetchImage = fetchImage
       if (!row.image_file) return
       try {
         const blob = await fetchImage(row)
-        zip.file(`images/${row.image_file}`, blob)
+        zip.file(`images/${row.image_file}`, new Uint8Array(await blob.arrayBuffer()))
       } catch {
         row.image_file = ''
       }
