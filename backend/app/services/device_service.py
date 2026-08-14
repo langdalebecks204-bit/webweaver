@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from datetime import timezone
 
 from app.models import Device
 from app.schemas import DeviceCreate, DeviceUpdate
@@ -18,7 +19,8 @@ def device_to_dict(d: Device) -> dict:
         "image_url": d.image_url,
         "status": d.status,
         "latency_ms": d.latency_ms,
-        "last_check": d.last_check,
+        "last_check": d.last_check.replace(tzinfo=timezone.utc).isoformat()
+        if d.last_check else None,
         "order_index": d.order_index,
     }
 

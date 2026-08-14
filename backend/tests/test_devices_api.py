@@ -73,6 +73,29 @@ def test_get_and_update(client, admin_headers):
     assert got.json()["name"] == "S1"
 
 
+def test_list_serializes_last_check_with_utc_offset(client, admin_headers):
+    from datetime import datetime, timezone
+    from sqlalchemy import update
+
+    from app.database import SessionLocal
+    from app.models import Device
+
+    created = client.post("/api/devices", headers=admin_headers,
+                          json={"name": "TZ", "type": "switch", "ip_address": "1.1.1.1"})
+    cid = created.json()["id"]
+    with SessionLocal() as db:
+        db.execute(update(Device).where(Device.id == cid)
+                   .values(last_check=datetime(2026, 8, 14, 2, 30, 0)))
+        db.commit()
+
+    row = next(x for x in client.get("/api/devices", headers=admin_headers).json()
+               if x["id"] == cid)
+    assert row["last_check"] == "2026-08-14T02:30:00+00:00"
+
+    detail = client.get(f"/api/devices/{cid}", headers=admin_headers).json()
+    assert detail["last_check"] == "2026-08-14T02:30:00+00:00"
+
+
 def test_get_404(client, admin_headers):
     r = client.get("/api/devices/9999", headers=admin_headers)
     assert r.status_code == 404
