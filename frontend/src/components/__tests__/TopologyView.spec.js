@@ -5,6 +5,7 @@ import { reactive } from 'vue'
 
 let fgMock
 const createMock = vi.hoisted(() => vi.fn())
+let lastCallWasNew
 
 vi.mock('force-graph', () => ({ default: createMock }))
 
@@ -59,6 +60,10 @@ describe('TopologyView', () => {
       destroy: vi.fn(() => fgMock),
     }
     createMock.mockReturnValue(fgMock)
+    createMock.mockImplementation(function () {
+      lastCallWasNew = this instanceof createMock
+      return fgMock
+    })
   })
 
   afterEach(() => {
@@ -72,6 +77,7 @@ describe('TopologyView', () => {
     wrapper = mount(TopologyView)
     await flushPromises()
     expect(createMock).toHaveBeenCalledTimes(1)
+    expect(lastCallWasNew).toBe(true)
     expect(fgMock.graphData).toHaveBeenCalledTimes(1)
     expect(fgMock.backgroundColor).toHaveBeenCalledWith('#0f172a')
     expect(fgMock.nodeCanvasObjectMode).toHaveBeenCalled()

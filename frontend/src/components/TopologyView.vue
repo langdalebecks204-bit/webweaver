@@ -84,7 +84,7 @@ function renderGraph() {
     fg.graphData(graphData.value)
     return
   }
-  fg = ForceGraph(graphEl.value)
+  fg = new ForceGraph(graphEl.value)
     .backgroundColor('#0f172a')
     .graphData(graphData.value)
     .nodeRelSize(1)
