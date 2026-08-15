@@ -12,6 +12,7 @@ import DeviceDetail from '../components/DeviceDetail.vue'
 import UsersPanel from '../components/UsersPanel.vue'
 import BackupPanel from '../components/BackupPanel.vue'
 import DeviceHistory from '../components/DeviceHistory.vue'
+import TopologyView from '../components/TopologyView.vue'
 import { allTypeOptions, typeLabel } from '../utils/deviceTypes'
 
 const router = useRouter()
@@ -320,6 +321,9 @@ async function onSaveDevice() {
             </div>
             <DeviceTable v-else :on-edit="openDeviceEdit" />
           </el-card>
+        </el-tab-pane>
+        <el-tab-pane label="拓扑图" name="topology">
+          <el-card><TopologyView /></el-card>
         </el-tab-pane>
         <el-tab-pane label="外网" name="external">
           <el-card>

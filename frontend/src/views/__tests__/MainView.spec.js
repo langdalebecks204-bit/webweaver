@@ -135,6 +135,18 @@ vi.mock('vue-router', () => ({
 
 import MainView from '../MainView.vue'
 
+describe('MainView 拓扑图页签', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('包含拓扑图页签', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-label="拓扑图"]').exists()).toBe(true)
+  })
+})
+
 function mountView() {
   return mount(MainView, {
     global: {
@@ -145,6 +157,7 @@ function mountView() {
           template: '<div class="device-table-stub"><button class="table-edit" @click="onEdit({ id: 2, name: \'核心交换机\', type: \'switch\', parent_id: 1, ip_address: \'10.0.0.1\', port: 22, location: \'机架1\' })">编辑</button></div>',
         },
         DeviceDetail: { template: '<div class="device-detail-stub" />' },
+        TopologyView: { template: '<div class="topology-stub" />' },
         UsersPanel: { template: '<div class="users-panel-stub" />' },
         BackupPanel: { template: '<div class="backup-panel-stub" />' },
         'el-radio-group': {
