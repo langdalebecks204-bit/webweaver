@@ -14,6 +14,7 @@
     "axios": "^1.7.9",
     "echarts": "^6.1.0",
     "element-plus": "^2.9.1",
+    "force-graph": "^1.51.4",
     "jszip": "^3.10.1",
     "pinia": "^2.3.0",
     "vue": "^3.5.13",
