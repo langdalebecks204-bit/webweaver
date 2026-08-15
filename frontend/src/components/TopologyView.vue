@@ -8,6 +8,8 @@ const store = useDevicesStore()
 const graphEl = ref(null)
 const error = ref('')
 const hoverNodeId = ref(null)
+const labelFontSize = ref(9)
+const showLabels = ref(true)
 
 const graphData = computed(() => treeToGraph(store.tree))
 
@@ -72,10 +74,12 @@ function drawNode(node, ctx) {
   ctx.fill()
   ctx.shadowBlur = 0
   ctx.globalAlpha = 1
-  ctx.fillStyle = 'rgba(255,255,255,0.85)'
-  ctx.font = '12px sans-serif'
-  ctx.textAlign = 'center'
-  ctx.fillText(node.name, node.x, node.y - r - 4)
+  if (showLabels.value || node.id === hoverNodeId.value) {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    ctx.font = `${labelFontSize.value}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.fillText(node.name, node.x, node.y - r - 4)
+  }
 }
 
 function renderGraph() {
@@ -138,8 +142,22 @@ onBeforeUnmount(() => {
 <template>
   <div class="topology-wrap">
     <div v-if="error" class="error">{{ error }}</div>
-    <div v-else-if="!graphData.nodes.length" class="empty">暂无设备</div>
-    <div v-else ref="graphEl" class="graph" />
+    <template v-else-if="graphData.nodes.length">
+      <div class="topo-toolbar">
+        <span class="label">字号</span>
+        <el-slider
+          v-model="labelFontSize"
+          :min="6"
+          :max="18"
+          :step="1"
+          class="font-slider"
+        />
+        <span class="label">显示标签</span>
+        <el-switch v-model="showLabels" />
+      </div>
+      <div ref="graphEl" class="graph" />
+    </template>
+    <div v-else class="empty">暂无设备</div>
   </div>
 </template>
 
@@ -150,10 +168,30 @@ onBeforeUnmount(() => {
   background: #0f172a;
   border-radius: 8px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.topo-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  color: #94a3b8;
+  background: #111c31;
+  border-bottom: 1px solid #1e293b;
+}
+.topo-toolbar .label {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.topo-toolbar .font-slider {
+  width: 160px;
+  margin: 0 8px;
 }
 .graph {
+  flex: 1;
   width: 100%;
-  height: 100%;
+  min-height: 0;
 }
 .error {
   color: #ef4444;

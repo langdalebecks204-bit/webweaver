@@ -74,7 +74,9 @@ describe('TopologyView', () => {
   })
 
   it('挂载时创建图谱并设置数据与特效', async () => {
-    wrapper = mount(TopologyView)
+    wrapper = mount(TopologyView, {
+      global: { stubs: { ElSlider: true, ElSwitch: true } },
+    })
     await flushPromises()
     expect(createMock).toHaveBeenCalledTimes(1)
     expect(lastCallWasNew).toBe(true)
@@ -90,7 +92,9 @@ describe('TopologyView', () => {
 
   it('空树时显示空态提示且不创建图谱', async () => {
     treeMock.splice(0, treeMock.length)
-    wrapper = mount(TopologyView)
+    wrapper = mount(TopologyView, {
+      global: { stubs: { ElSlider: true, ElSwitch: true } },
+    })
     await flushPromises()
     expect(wrapper.text()).toContain('暂无设备')
     expect(createMock).not.toHaveBeenCalled()
@@ -98,7 +102,9 @@ describe('TopologyView', () => {
 
   it('数据异步加载完成后创建图谱', async () => {
     treeMock.splice(0, treeMock.length)
-    wrapper = mount(TopologyView)
+    wrapper = mount(TopologyView, {
+      global: { stubs: { ElSlider: true, ElSwitch: true } },
+    })
     await flushPromises()
     expect(createMock).not.toHaveBeenCalled()
     store().tree.push({
@@ -114,5 +120,54 @@ describe('TopologyView', () => {
     await flushPromises()
     expect(createMock).toHaveBeenCalledTimes(1)
     expect(fgMock.graphData).toHaveBeenCalledTimes(1)
+  })
+
+  it('标签字号可调整且影响绘制', async () => {
+    wrapper = mount(TopologyView, {
+      global: { stubs: { ElSlider: true, ElSwitch: true } },
+    })
+    await flushPromises()
+    const draw = fgMock.nodeCanvasObject.mock.calls[0][0]
+    const ctx = { fillStyle: '', font: '', textAlign: '', fillText: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), fill: vi.fn(), globalAlpha: 1, shadowColor: '', shadowBlur: 0 }
+    const node = { id: 3, name: '节点C', status: 'online', val: 8, x: 10, y: 10 }
+    draw(node, ctx)
+    expect(ctx.font).toBe('9px sans-serif')
+    // 修改字号
+    const slider = wrapper.findComponent({ name: 'ElSlider' })
+    expect(slider.exists()).toBe(true)
+    wrapper.vm.labelFontSize = 14
+    await flushPromises()
+    draw(node, ctx)
+    expect(ctx.font).toBe('14px sans-serif')
+  })
+
+  it('隐藏标签时非悬停节点不显示文字，悬停节点仍显示', async () => {
+    wrapper = mount(TopologyView, {
+      global: { stubs: { ElSlider: true, ElSwitch: true } },
+    })
+    await flushPromises()
+    const draw = fgMock.nodeCanvasObject.mock.calls[0][0]
+    const ctx = { fillStyle: '', font: '', textAlign: '', fillText: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), fill: vi.fn(), globalAlpha: 1, shadowColor: '', shadowBlur: 0 }
+    const node = { id: 3, name: '节点C', status: 'online', val: 8, x: 10, y: 10 }
+    wrapper.vm.showLabels = false
+    await flushPromises()
+    draw(node, ctx)
+    expect(ctx.fillText).not.toHaveBeenCalled()
+    // 模拟悬停
+    fgMock.onNodeHover.mock.calls[0][0](node)
+    draw(node, ctx)
+    expect(ctx.fillText).toHaveBeenCalledWith('节点C', 10, expect.any(Number))
+  })
+
+  it('拓扑图页渲染字号滑块与显示标签开关', async () => {
+    wrapper = mount(TopologyView, {
+      global: { stubs: { ElSlider: true, ElSwitch: true } },
+    })
+    await flushPromises()
+    expect(wrapper.find('.topo-toolbar').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'ElSlider' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'ElSwitch' }).exists()).toBe(true)
+    expect(wrapper.text()).toContain('字号')
+    expect(wrapper.text()).toContain('显示标签')
   })
 })
