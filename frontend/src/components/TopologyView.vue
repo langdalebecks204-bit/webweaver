@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ForceGraph from 'force-graph'
 import { useDevicesStore } from '../stores/devices'
 import { treeToGraph } from '../utils/treeToGraph'
@@ -79,8 +79,11 @@ function drawNode(node, ctx) {
 }
 
 function renderGraph() {
-  if (!graphEl.value) return
-  if (fg) fg.destroy()
+  if (!graphEl.value || !graphData.value.nodes.length) return
+  if (fg) {
+    fg.graphData(graphData.value)
+    return
+  }
   fg = ForceGraph(graphEl.value)
     .backgroundColor('#0f172a')
     .graphData(graphData.value)
@@ -102,7 +105,21 @@ function renderGraph() {
     .height(graphEl.value.clientHeight)
 }
 
-onMounted(() => {
+watch(
+  () => graphData.value.nodes.length,
+  async () => {
+    if (!graphData.value.nodes.length) return
+    await nextTick()
+    try {
+      renderGraph()
+    } catch (e) {
+      error.value = `图谱初始化失败：${e.message}`
+    }
+  }
+)
+
+onMounted(async () => {
+  await nextTick()
   try {
     renderGraph()
   } catch (e) {

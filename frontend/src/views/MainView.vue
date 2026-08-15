@@ -322,7 +322,7 @@ async function onSaveDevice() {
             <DeviceTable v-else :on-edit="openDeviceEdit" />
           </el-card>
         </el-tab-pane>
-        <el-tab-pane label="拓扑图" name="topology">
+        <el-tab-pane lazy label="拓扑图" name="topology">
           <el-card><TopologyView /></el-card>
         </el-tab-pane>
         <el-tab-pane label="外网" name="external">

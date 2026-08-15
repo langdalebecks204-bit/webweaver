@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { reactive } from 'vue'
 
 let fgMock
 const createMock = vi.hoisted(() => vi.fn())
@@ -19,12 +20,18 @@ const treeMock = vi.hoisted(() => [
 ])
 
 vi.mock('../../stores/devices', () => ({
-  useDevicesStore: () => ({ tree: treeMock }),
+  useDevicesStore: () => reactive({ tree: reactive(treeMock) }),
 }))
 
 import TopologyView from '../TopologyView.vue'
+import { useDevicesStore } from '../../stores/devices'
+
+function store() {
+  return useDevicesStore()
+}
 
 describe('TopologyView', () => {
+  let wrapper
   beforeEach(() => {
     vi.clearAllMocks()
     treeMock.splice(0, treeMock.length, {
@@ -54,8 +61,15 @@ describe('TopologyView', () => {
     createMock.mockReturnValue(fgMock)
   })
 
+  afterEach(() => {
+    if (wrapper) {
+      wrapper.unmount()
+      wrapper = null
+    }
+  })
+
   it('挂载时创建图谱并设置数据与特效', async () => {
-    mount(TopologyView)
+    wrapper = mount(TopologyView)
     await flushPromises()
     expect(createMock).toHaveBeenCalledTimes(1)
     expect(fgMock.graphData).toHaveBeenCalledTimes(1)
@@ -70,9 +84,29 @@ describe('TopologyView', () => {
 
   it('空树时显示空态提示且不创建图谱', async () => {
     treeMock.splice(0, treeMock.length)
-    const wrapper = mount(TopologyView)
+    wrapper = mount(TopologyView)
     await flushPromises()
     expect(wrapper.text()).toContain('暂无设备')
     expect(createMock).not.toHaveBeenCalled()
+  })
+
+  it('数据异步加载完成后创建图谱', async () => {
+    treeMock.splice(0, treeMock.length)
+    wrapper = mount(TopologyView)
+    await flushPromises()
+    expect(createMock).not.toHaveBeenCalled()
+    store().tree.push({
+      id: 2,
+      name: '核心交换机',
+      type: 'switch',
+      status: 'online',
+      latency_ms: 5,
+      ip_address: '10.0.0.1',
+      parent_id: null,
+      children: [],
+    })
+    await flushPromises()
+    expect(createMock).toHaveBeenCalledTimes(1)
+    expect(fgMock.graphData).toHaveBeenCalledTimes(1)
   })
 })
