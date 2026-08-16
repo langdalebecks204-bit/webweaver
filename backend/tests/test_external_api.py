@@ -54,7 +54,7 @@ def test_external_admin_only_write(client, admin_headers):
 def test_check_all_updates_results(client, admin_headers, monkeypatch):
     from app.inspector.engine import ProbeResult
 
-    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout, ping_count, ping_packet_size):
         return ProbeResult(status="online", latency_ms=4)
 
     async def fake_resolve(domain):

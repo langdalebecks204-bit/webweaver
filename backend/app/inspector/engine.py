@@ -15,7 +15,7 @@ from app.config import settings
 from app.models import Device, ExternalTarget, ProbeRecord, utcnow
 from app.services.device_service import device_to_dict
 from app.services.external_service import external_target_to_dict
-from app.services.setting_service import get_probe_history_days
+from app.services.setting_service import get_ping_params, get_probe_history_days
 
 
 @dataclass
@@ -24,14 +24,18 @@ class ProbeResult:
     latency_ms: int | None = None
 
 
-async def icmp_ping(host: str, timeout: float) -> int | None:
-    try:
-        latency = await async_ping(host, timeout=timeout, unit="ms")
-    except Exception:
+async def icmp_ping(host: str, timeout: float, count: int, packet_size: int) -> int | None:
+    latencies = []
+    for _ in range(count):
+        try:
+            latency = await async_ping(host, timeout=timeout, size=packet_size, unit="ms")
+        except Exception:
+            latency = None
+        if latency is not None and latency is not False:
+            latencies.append(latency)
+    if len(latencies) <= count // 2:
         return None
-    if latency is None or latency is False:
-        return None
-    return int(round(latency))
+    return int(round(sum(latencies) / len(latencies)))
 
 
 async def tcp_probe(host: str, port: int, timeout: float) -> bool:
@@ -47,9 +51,10 @@ async def tcp_probe(host: str, port: int, timeout: float) -> bool:
 
 
 async def probe_device(
-    ip: str, port: int | None, ping_timeout: float, tcp_timeout: float
+    ip: str, port: int | None, ping_timeout: float, tcp_timeout: float,
+    ping_count: int, ping_packet_size: int,
 ) -> ProbeResult:
-    latency = await icmp_ping(ip, ping_timeout)
+    latency = await icmp_ping(ip, ping_timeout, ping_count, ping_packet_size)
     if latency is None:
         return ProbeResult(status="offline")
     if port is not None:
@@ -61,11 +66,13 @@ async def probe_device(
 
 async def run_inspection(db, devices: list[Device]) -> list[dict]:
     semaphore = asyncio.Semaphore(settings.ping_concurrency)
+    ping_count, ping_packet_size = get_ping_params(db)
 
     async def check_one(device: Device) -> dict:
         async with semaphore:
             result = await probe_device(
-                device.ip_address, device.port, settings.ping_timeout, settings.tcp_timeout
+                device.ip_address, device.port, settings.ping_timeout, settings.tcp_timeout,
+                ping_count, ping_packet_size,
             )
         device.status = result.status
         device.latency_ms = result.latency_ms
@@ -113,12 +120,14 @@ async def resolve_domain(domain: str) -> str | None:
 
 async def run_external_inspection(db, targets: list[ExternalTarget]) -> list[dict]:
     semaphore = asyncio.Semaphore(settings.ping_concurrency)
+    ping_count, ping_packet_size = get_ping_params(db)
 
     async def check_one(target: ExternalTarget) -> dict:
         async with semaphore:
             if target.ip_address:
                 result = await probe_device(
-                    target.ip_address, target.port, settings.ping_timeout, settings.tcp_timeout
+                    target.ip_address, target.port, settings.ping_timeout, settings.tcp_timeout,
+                    ping_count, ping_packet_size,
                 )
                 target.ip_status = result.status
                 target.ip_latency_ms = result.latency_ms
@@ -130,7 +139,8 @@ async def run_external_inspection(db, targets: list[ExternalTarget]) -> list[dic
                     target.domain_latency_ms = None
                 else:
                     result = await probe_device(
-                        ip, target.port, settings.ping_timeout, settings.tcp_timeout
+                        ip, target.port, settings.ping_timeout, settings.tcp_timeout,
+                        ping_count, ping_packet_size,
                     )
                     target.domain_status = result.status
                     target.domain_latency_ms = result.latency_ms

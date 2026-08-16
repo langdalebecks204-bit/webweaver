@@ -3,7 +3,7 @@ import pytest
 from datetime import datetime, timedelta, timezone
 
 from app.database import SessionLocal, init_db
-from app.inspector.engine import ProbeResult, probe_device, run_inspection
+from app.inspector.engine import ProbeResult, icmp_ping, probe_device, run_inspection
 from app.models import Device
 
 
@@ -18,8 +18,39 @@ def db():
         yield session
 
 
+async def test_icmp_ping_multiple_majority_online(monkeypatch):
+    results = [12, 16, None]
+    calls = []
+
+    async def fake_async_ping(host, timeout, size, unit):
+        calls.append((host, timeout, size, unit))
+        return results.pop(0)
+
+    monkeypatch.setattr("app.inspector.engine.async_ping", fake_async_ping)
+    assert await icmp_ping("10.0.0.1", 1.0, 3, 128) == 14
+    assert calls == [("10.0.0.1", 1.0, 128, "ms"), ("10.0.0.1", 1.0, 128, "ms"), ("10.0.0.1", 1.0, 128, "ms")]
+
+
+async def test_icmp_ping_offline_when_not_majority(monkeypatch):
+    results = [12, None, None]
+
+    async def fake_async_ping(host, timeout, size, unit):
+        return results.pop(0)
+
+    monkeypatch.setattr("app.inspector.engine.async_ping", fake_async_ping)
+    assert await icmp_ping("10.0.0.1", 1.0, 3, 56) is None
+
+
+async def test_icmp_ping_single_count(monkeypatch):
+    async def fake_async_ping(host, timeout, size, unit):
+        return 5
+
+    monkeypatch.setattr("app.inspector.engine.async_ping", fake_async_ping)
+    assert await icmp_ping("10.0.0.1", 1.0, 1, 56) == 5
+
+
 async def test_probe_online(monkeypatch):
-    async def fake_icmp(host, timeout):
+    async def fake_icmp(host, timeout, count, packet_size):
         return 12
 
     async def fake_tcp(host, port, timeout):
@@ -27,12 +58,12 @@ async def test_probe_online(monkeypatch):
 
     monkeypatch.setattr("app.inspector.engine.icmp_ping", fake_icmp)
     monkeypatch.setattr("app.inspector.engine.tcp_probe", fake_tcp)
-    result = await probe_device("10.0.0.1", 443, 1.0, 2.0)
+    result = await probe_device("10.0.0.1", 443, 1.0, 2.0, 3, 56)
     assert result == ProbeResult(status="online", latency_ms=12)
 
 
 async def test_probe_warning_when_port_fails(monkeypatch):
-    async def fake_icmp(host, timeout):
+    async def fake_icmp(host, timeout, count, packet_size):
         return 12
 
     async def fake_tcp(host, port, timeout):
@@ -40,16 +71,16 @@ async def test_probe_warning_when_port_fails(monkeypatch):
 
     monkeypatch.setattr("app.inspector.engine.icmp_ping", fake_icmp)
     monkeypatch.setattr("app.inspector.engine.tcp_probe", fake_tcp)
-    result = await probe_device("10.0.0.1", 443, 1.0, 2.0)
+    result = await probe_device("10.0.0.1", 443, 1.0, 2.0, 3, 56)
     assert result == ProbeResult(status="warning", latency_ms=12)
 
 
 async def test_probe_offline_when_ping_times_out(monkeypatch):
-    async def fake_icmp(host, timeout):
+    async def fake_icmp(host, timeout, count, packet_size):
         return None
 
     monkeypatch.setattr("app.inspector.engine.icmp_ping", fake_icmp)
-    result = await probe_device("10.0.0.1", None, 1.0, 2.0)
+    result = await probe_device("10.0.0.1", None, 1.0, 2.0, 3, 56)
     assert result == ProbeResult(status="offline", latency_ms=None)
 
 
@@ -58,7 +89,7 @@ async def test_run_inspection_updates_db(monkeypatch, db):
     db.add(dev)
     db.commit()
 
-    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout, ping_count, ping_packet_size):
         return ProbeResult(status="online", latency_ms=8)
 
     monkeypatch.setattr("app.inspector.engine.probe_device", fake_probe)
@@ -75,7 +106,7 @@ async def test_run_inspection_writes_probe_record(monkeypatch, db):
     db.add(dev)
     db.commit()
 
-    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout, ping_count, ping_packet_size):
         return ProbeResult(status="online", latency_ms=8)
 
     monkeypatch.setattr("app.inspector.engine.probe_device", fake_probe)
@@ -97,7 +128,7 @@ async def test_run_inspection_cleans_old_records(monkeypatch, db):
     db.add(ProbeRecord(device_id=dev.id, checked_at=old, status="offline", latency_ms=None))
     db.commit()
 
-    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout, ping_count, ping_packet_size):
         return ProbeResult(status="online", latency_ms=5)
 
     monkeypatch.setattr("app.inspector.engine.probe_device", fake_probe)
@@ -116,7 +147,7 @@ async def test_run_external_inspection_updates_both(monkeypatch, db):
     db.add(target)
     db.commit()
 
-    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout, ping_count, ping_packet_size):
         return ProbeResult(status="online", latency_ms=11)
 
     async def fake_resolve(domain):
@@ -142,7 +173,7 @@ async def test_run_external_inspection_ip_only(monkeypatch, db):
     db.add(target)
     db.commit()
 
-    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout, ping_count, ping_packet_size):
         return ProbeResult(status="warning", latency_ms=5)
 
     monkeypatch.setattr("app.inspector.engine.probe_device", fake_probe)

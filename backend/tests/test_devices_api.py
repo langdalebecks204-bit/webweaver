@@ -126,7 +126,7 @@ def test_viewer_forbidden_from_write(client, admin_headers):
 def test_recheck_single_device(client, admin_headers, monkeypatch):
     from app.inspector.engine import ProbeResult
 
-    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout, ping_count, ping_packet_size):
         return ProbeResult(status="online", latency_ms=7)
 
     monkeypatch.setattr("app.inspector.engine.probe_device", fake_probe)
@@ -148,7 +148,7 @@ def test_recheck_single_device(client, admin_headers, monkeypatch):
 def test_recheck_all_devices(client, admin_headers, monkeypatch):
     from app.inspector.engine import ProbeResult
 
-    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout, ping_count, ping_packet_size):
         return ProbeResult(status="online", latency_ms=5)
 
     monkeypatch.setattr("app.inspector.engine.probe_device", fake_probe)
@@ -189,7 +189,7 @@ def test_recheck_all_requires_auth(client):
 def test_recheck_all_includes_external(client, admin_headers, monkeypatch):
     from app.inspector.engine import ProbeResult
 
-    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout, ping_count, ping_packet_size):
         return ProbeResult(status="online", latency_ms=6)
 
     async def fake_resolve(domain):
@@ -212,7 +212,7 @@ def test_recheck_all_includes_external(client, admin_headers, monkeypatch):
 def test_recheck_group_with_ip(client, admin_headers, monkeypatch):
     from app.inspector.engine import ProbeResult
 
-    async def fake_probe(ip, port, ping_timeout, tcp_timeout):
+    async def fake_probe(ip, port, ping_timeout, tcp_timeout, ping_count, ping_packet_size):
         return ProbeResult(status="online", latency_ms=3)
 
     monkeypatch.setattr("app.inspector.engine.probe_device", fake_probe)
