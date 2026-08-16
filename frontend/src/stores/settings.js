@@ -3,8 +3,10 @@ import {
   addDeviceType,
   fetchDeviceTypes,
   fetchInspectionInterval,
+  fetchPingParams,
   removeDeviceType,
   updateInspectionInterval,
+  updatePingParams,
 } from '../api/settings'
 
 export const useSettingsStore = defineStore('settings', {
@@ -14,6 +16,8 @@ export const useSettingsStore = defineStore('settings', {
     builtinTypes: [],
     customTypes: [],
     typesLoaded: false,
+    pingCount: 3,
+    pingPacketSize: 56,
   }),
   actions: {
     async loadInterval() {
@@ -42,6 +46,16 @@ export const useSettingsStore = defineStore('settings', {
     async removeType(name) {
       await removeDeviceType(name)
       await this.loadTypes()
+    },
+    async loadPingParams() {
+      const { data } = await fetchPingParams()
+      this.pingCount = data.ping_count
+      this.pingPacketSize = data.ping_packet_size
+    },
+    async savePingParams(count, size) {
+      const { data } = await updatePingParams(count, size)
+      this.pingCount = data.ping_count
+      this.pingPacketSize = data.ping_packet_size
     },
   },
 })

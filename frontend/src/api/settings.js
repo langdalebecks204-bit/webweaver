@@ -19,3 +19,11 @@ export function addDeviceType(name) {
 export function removeDeviceType(name) {
   return client.delete(`/settings/device-types/${encodeURIComponent(name)}`)
 }
+
+export function fetchPingParams() {
+  return client.get('/settings/ping-params')
+}
+
+export function updatePingParams(count, size) {
+  return client.put('/settings/ping-params', { ping_count: count, ping_packet_size: size })
+}

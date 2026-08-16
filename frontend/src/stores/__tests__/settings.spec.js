@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
-const { fetchMock, updateMock, fetchTypesMock, addTypeMock, removeTypeMock } = vi.hoisted(() => ({
+const { fetchMock, updateMock, fetchTypesMock, addTypeMock, removeTypeMock, fetchPingMock, updatePingMock } = vi.hoisted(() => ({
   fetchMock: vi.fn(),
   updateMock: vi.fn(),
   fetchTypesMock: vi.fn(),
   addTypeMock: vi.fn(),
   removeTypeMock: vi.fn(),
+  fetchPingMock: vi.fn(),
+  updatePingMock: vi.fn(),
 }))
 
 vi.mock('../../api/settings', () => ({
@@ -15,6 +17,8 @@ vi.mock('../../api/settings', () => ({
   fetchDeviceTypes: fetchTypesMock,
   addDeviceType: addTypeMock,
   removeDeviceType: removeTypeMock,
+  fetchPingParams: fetchPingMock,
+  updatePingParams: updatePingMock,
 }))
 
 import { useSettingsStore } from '../settings'
@@ -73,5 +77,29 @@ describe('settings 设备类型', () => {
     await store.removeType('nas2')
     expect(removeTypeMock).toHaveBeenCalledWith('nas2')
     expect(store.customTypes).toEqual([])
+  })
+})
+
+describe('settings ping 参数', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('loadPingParams 拉取当前 ping 参数', async () => {
+    fetchPingMock.mockResolvedValue({ data: { ping_count: 5, ping_packet_size: 128 } })
+    const store = useSettingsStore()
+    await store.loadPingParams()
+    expect(store.pingCount).toBe(5)
+    expect(store.pingPacketSize).toBe(128)
+  })
+
+  it('savePingParams 调用接口并更新 state', async () => {
+    updatePingMock.mockResolvedValue({ data: { ping_count: 8, ping_packet_size: 256 } })
+    const store = useSettingsStore()
+    await store.savePingParams(8, 256)
+    expect(updatePingMock).toHaveBeenCalledWith(8, 256)
+    expect(store.pingCount).toBe(8)
+    expect(store.pingPacketSize).toBe(256)
   })
 })
