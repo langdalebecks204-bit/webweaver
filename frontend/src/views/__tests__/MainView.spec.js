@@ -24,6 +24,8 @@ const {
   addTypeMock,
   removeTypeMock,
   loadTypesMock,
+  loadPingParamsMock,
+  savePingParamsMock,
 } = vi.hoisted(() => ({
   createMock: vi.fn(),
   loadMock: vi.fn(),
@@ -46,6 +48,8 @@ const {
   addTypeMock: vi.fn(),
   removeTypeMock: vi.fn(),
   loadTypesMock: vi.fn(),
+  loadPingParamsMock: vi.fn(),
+  savePingParamsMock: vi.fn(),
 }))
 
 const authState = vi.hoisted(() => ({ role: 'admin' }))
@@ -107,6 +111,10 @@ vi.mock('../../stores/settings', () => ({
     pollIntervalMinutes: 5,
     loadInterval: loadIntervalMock,
     saveInterval: saveIntervalMock,
+    pingCount: 3,
+    pingPacketSize: 56,
+    loadPingParams: loadPingParamsMock,
+    savePingParams: savePingParamsMock,
     builtinTypes: ['group', 'server', 'switch', 'terminal', 'camera', 'nvr', 'router', 'firewall', 'ap', 'printer', 'nas', 'ups'],
     customTypes: ['nas2'],
     typesLoaded: true,
@@ -209,6 +217,10 @@ function mountView() {
 
 function buttonByText(wrapper, text) {
   return wrapper.findAll('button').find((b) => b.text() === text)
+}
+
+function typeToggleButton(wrapper) {
+  return wrapper.findAll('button').find((b) => b.text().startsWith('设备类型'))
 }
 
 describe('MainView 新增根分组', () => {
@@ -413,6 +425,8 @@ describe('MainView 设备类型管理', () => {
     const wrapper = mountView()
     await flushPromises()
     expect(wrapper.text()).toContain('设备类型')
+    await typeToggleButton(wrapper).trigger('click')
+    await flushPromises()
     const addInput = wrapper.findAll('input.t-input').find((i) => i.attributes('placeholder')?.includes('自定义类型名'))
     await addInput.setValue('nas2')
     const addBtn = wrapper.findAll('button').find((b) => b.text() === '添加')
@@ -427,6 +441,8 @@ describe('MainView 设备类型管理', () => {
     confirmMock.mockResolvedValue()
     const wrapper = mountView()
     await flushPromises()
+    await typeToggleButton(wrapper).trigger('click')
+    await flushPromises()
     const removeBtn = wrapper.findAll('button').find((b) => b.text() === '移除')
     expect(removeBtn).toBeTruthy()
     await removeBtn.trigger('click')
@@ -440,6 +456,61 @@ describe('MainView 设备类型管理', () => {
     const wrapper = mountView()
     await flushPromises()
     expect(wrapper.text()).not.toContain('设备类型')
+  })
+})
+
+describe('MainView 设备类型收起', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('默认收起，点击展开后显示标签与添加控件', async () => {
+    authState.role = 'admin'
+    const wrapper = mountView()
+    await flushPromises()
+    const collapsedContent = wrapper.findAll('input.t-input').find((i) => i.attributes('placeholder')?.includes('自定义类型名'))
+    expect(collapsedContent).toBeFalsy()
+    await typeToggleButton(wrapper).trigger('click')
+    await flushPromises()
+    const addInput = wrapper.findAll('input.t-input').find((i) => i.attributes('placeholder')?.includes('自定义类型名'))
+    expect(addInput).toBeTruthy()
+  })
+
+  it('再次点击收起', async () => {
+    authState.role = 'admin'
+    const wrapper = mountView()
+    await flushPromises()
+    await typeToggleButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('input.t-input').find((i) => i.attributes('placeholder')?.includes('自定义类型名'))).toBeTruthy()
+    await typeToggleButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('input.t-input').find((i) => i.attributes('placeholder')?.includes('自定义类型名'))).toBeFalsy()
+  })
+})
+
+describe('MainView ping 参数设置', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('admin 显示次数/包大小并可保存', async () => {
+    authState.role = 'admin'
+    savePingParamsMock.mockResolvedValue({})
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).toContain('保存巡检参数')
+    await buttonByText(wrapper, '保存巡检参数').trigger('click')
+    await flushPromises()
+    expect(savePingParamsMock).toHaveBeenCalledWith(3, 56)
+    expect(successMock).toHaveBeenCalledWith('已保存')
+  })
+
+  it('viewer 不显示巡检参数设置', async () => {
+    authState.role = 'viewer'
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('保存巡检参数')
   })
 })
 

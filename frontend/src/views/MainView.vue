@@ -44,6 +44,7 @@ onMounted(async () => {
   await external.load()
   if (auth.user?.role === 'admin') {
     await settings.loadInterval()
+    await settings.loadPingParams()
   }
   await settings.loadTypes()
   refreshTimer = setInterval(() => {
@@ -62,6 +63,7 @@ function onLogout() {
 }
 
 const newTypeName = ref('')
+const typesExpanded = ref(false)
 
 async function onAddCustomType() {
   const name = (newTypeName.value || '').trim()
@@ -119,6 +121,15 @@ async function onRecheckAll() {
 async function onSaveInterval() {
   try {
     await settings.saveInterval(settings.pollIntervalMinutes)
+    ElMessage.success('已保存')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || '保存失败')
+  }
+}
+
+async function onSavePingParams() {
+  try {
+    await settings.savePingParams(settings.pingCount, settings.pingPacketSize)
     ElMessage.success('已保存')
   } catch (error) {
     ElMessage.error(error.response?.data?.detail || '保存失败')
@@ -266,6 +277,21 @@ async function onSaveDevice() {
                   />
                   <el-button size="small" @click="onSaveInterval">保存间隔</el-button>
                 </div>
+                <div v-if="isAdmin" class="ping-setting">
+                  <el-input-number
+                    v-model="settings.pingCount"
+                    :min="1"
+                    :max="10"
+                    size="small"
+                  />
+                  <el-input-number
+                    v-model="settings.pingPacketSize"
+                    :min="32"
+                    :max="10000"
+                    size="small"
+                  />
+                  <el-button size="small" @click="onSavePingParams">保存巡检参数</el-button>
+                </div>
                 <div class="stats">
                   <el-tag type="success">在线 {{ store.stats.online }}</el-tag>
                   <el-tag type="warning">警告 {{ store.stats.warning }}</el-tag>
@@ -273,32 +299,39 @@ async function onSaveDevice() {
                   <el-tag type="info">未知 {{ store.stats.unknown }}</el-tag>
                 </div>
                 <div v-if="isAdmin" class="type-manage">
-                  <span>设备类型：</span>
-                  <el-tag
-                    v-for="t in settings.builtinTypes"
-                    :key="t"
-                    size="small"
-                    class="type-tag"
-                  >
-                    {{ typeLabel(t) }}（内置）
-                  </el-tag>
-                  <el-tag
-                    v-for="t in settings.customTypes"
-                    :key="t"
-                    size="small"
-                    closable
-                    @close="onRemoveCustomType(t)"
-                    class="type-tag"
-                  >
-                    {{ t }}
-                  </el-tag>
-                  <el-input
-                    v-model="newTypeName"
-                    placeholder="自定义类型名"
-                    size="small"
-                    class="type-input"
-                  />
-                  <el-button size="small" type="primary" @click="onAddCustomType">添加</el-button>
+                  <el-button size="small" @click="typesExpanded = !typesExpanded">
+                    设备类型{{ typesExpanded ? ' ▴' : ' ▾' }}
+                  </el-button>
+                  <el-collapse-transition>
+                    <div v-if="typesExpanded" class="type-content">
+                      <span>设备类型：</span>
+                      <el-tag
+                        v-for="t in settings.builtinTypes"
+                        :key="t"
+                        size="small"
+                        class="type-tag"
+                      >
+                        {{ typeLabel(t) }}（内置）
+                      </el-tag>
+                      <el-tag
+                        v-for="t in settings.customTypes"
+                        :key="t"
+                        size="small"
+                        closable
+                        @close="onRemoveCustomType(t)"
+                        class="type-tag"
+                      >
+                        {{ t }}
+                      </el-tag>
+                      <el-input
+                        v-model="newTypeName"
+                        placeholder="自定义类型名"
+                        size="small"
+                        class="type-input"
+                      />
+                      <el-button size="small" type="primary" @click="onAddCustomType">添加</el-button>
+                    </div>
+                  </el-collapse-transition>
                 </div>
               </div>
             </template>
@@ -466,6 +499,7 @@ async function onSaveDevice() {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 .stats {
   margin-left: auto;
@@ -496,6 +530,18 @@ async function onSaveDevice() {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.ping-setting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.type-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  width: 100%;
 }
 .external-table {
   width: 100%;
