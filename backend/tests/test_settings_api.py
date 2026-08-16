@@ -113,3 +113,53 @@ def test_probe_history_days_out_of_range(client, admin_headers):
     assert client.put(
         "/api/settings/probe-history-days", headers=admin_headers, json={"probe_history_days": 366}
     ).status_code == 422
+
+
+def test_ping_params_default(client, admin_headers):
+    r = client.get("/api/settings/ping-params", headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json() == {"ping_count": 3, "ping_packet_size": 56}
+
+
+def test_ping_params_put_persists(client, admin_headers):
+    r = client.put(
+        "/api/settings/ping-params",
+        headers=admin_headers,
+        json={"ping_count": 5, "ping_packet_size": 128},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"ping_count": 5, "ping_packet_size": 128}
+
+    got = client.get("/api/settings/ping-params", headers=admin_headers)
+    assert got.json() == {"ping_count": 5, "ping_packet_size": 128}
+
+    with SessionLocal() as db:
+        assert db.get(Setting, "ping_count").value == "5"
+        assert db.get(Setting, "ping_packet_size").value == "128"
+
+
+def test_ping_params_admin_only(client, admin_headers):
+    vh = _mk_viewer(client)
+    assert client.get("/api/settings/ping-params", headers=vh).status_code == 403
+    assert client.put(
+        "/api/settings/ping-params", headers=vh, json={"ping_count": 3, "ping_packet_size": 56}
+    ).status_code == 403
+
+
+def test_ping_params_out_of_range(client, admin_headers):
+    assert client.put(
+        "/api/settings/ping-params", headers=admin_headers,
+        json={"ping_count": 0, "ping_packet_size": 56},
+    ).status_code == 422
+    assert client.put(
+        "/api/settings/ping-params", headers=admin_headers,
+        json={"ping_count": 11, "ping_packet_size": 56},
+    ).status_code == 422
+    assert client.put(
+        "/api/settings/ping-params", headers=admin_headers,
+        json={"ping_count": 3, "ping_packet_size": 31},
+    ).status_code == 422
+    assert client.put(
+        "/api/settings/ping-params", headers=admin_headers,
+        json={"ping_count": 3, "ping_packet_size": 10001},
+    ).status_code == 422

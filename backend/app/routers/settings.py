@@ -7,8 +7,10 @@ from app.deps import require_admin
 from app.inspector.scheduler import reschedule_interval
 from app.models import User
 from app.services.setting_service import (
+    get_ping_params,
     get_poll_interval,
     get_probe_history_days,
+    set_ping_params,
     set_poll_interval,
     set_probe_history_days,
 )
@@ -22,6 +24,11 @@ class InspectionIntervalUpdate(BaseModel):
 
 class ProbeHistoryDaysUpdate(BaseModel):
     probe_history_days: int = Field(ge=1, le=365)
+
+
+class PingParamsUpdate(BaseModel):
+    ping_count: int = Field(ge=1, le=10)
+    ping_packet_size: int = Field(ge=32, le=10000)
 
 
 @router.get("/inspection-interval")
@@ -59,3 +66,22 @@ def update_probe_history_days_route(
 ):
     days = set_probe_history_days(db, payload.probe_history_days)
     return {"probe_history_days": days}
+
+
+@router.get("/ping-params")
+def get_ping_params_route(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    count, size = get_ping_params(db)
+    return {"ping_count": count, "ping_packet_size": size}
+
+
+@router.put("/ping-params")
+def update_ping_params_route(
+    payload: PingParamsUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    count, size = set_ping_params(db, payload.ping_count, payload.ping_packet_size)
+    return {"ping_count": count, "ping_packet_size": size}

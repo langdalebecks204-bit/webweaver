@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     probe_history_days: int = 30
     ping_concurrency: int = 100
     ping_timeout: float = 1.0
+    ping_count: int = 3
+    ping_packet_size: int = 56
     tcp_timeout: float = 2.0
     default_admin: str = "admin"
     default_admin_password: str = "admin123"
