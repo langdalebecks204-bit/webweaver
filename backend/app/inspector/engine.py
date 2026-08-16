@@ -8,8 +8,12 @@ try:
 except ImportError:
     import ping3
 
-    async def async_ping(host: str, timeout: float, unit: str) -> float | None:
-        return await asyncio.to_thread(ping3.ping, host, timeout=timeout, unit=unit)
+    async def async_ping(
+        host: str, timeout: float, size: int | None = None, unit: str = "ms"
+    ) -> float | None:
+        return await asyncio.to_thread(
+            ping3.ping, host, timeout=timeout, size=size, unit=unit
+        )
 
 from app.config import settings
 from app.models import Device, ExternalTarget, ProbeRecord, utcnow

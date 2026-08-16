@@ -49,6 +49,21 @@ async def test_icmp_ping_single_count(monkeypatch):
     assert await icmp_ping("10.0.0.1", 1.0, 1, 56) == 5
 
 
+async def test_fallback_async_ping_forwards_size(monkeypatch):
+    import app.inspector.engine as engine
+
+    captured = {}
+
+    def fake_sync_ping(host, timeout, size, unit):
+        captured.update(host=host, timeout=timeout, size=size, unit=unit)
+        return 9.0
+
+    monkeypatch.setattr(engine.ping3, "ping", fake_sync_ping)
+    result = await engine.async_ping("10.0.0.1", timeout=1.0, size=128, unit="ms")
+    assert result == 9.0
+    assert captured == {"host": "10.0.0.1", "timeout": 1.0, "size": 128, "unit": "ms"}
+
+
 async def test_probe_online(monkeypatch):
     async def fake_icmp(host, timeout, count, packet_size):
         return 12
