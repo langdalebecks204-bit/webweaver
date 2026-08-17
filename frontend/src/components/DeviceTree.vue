@@ -4,18 +4,23 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDevicesStore } from '../stores/devices'
 import { useSettingsStore } from '../stores/settings'
 import { allTypeOptions, typeIcon } from '../utils/deviceTypes'
+import PortBindingDialog from './PortBindingDialog.vue'
 
 const props = defineProps({ node: { type: Object, required: true } })
 const emit = defineEmits(['open-history', 'open-detail'])
 const store = useDevicesStore()
 const settingsStore = useSettingsStore()
 const dialogVisible = ref(false)
+const portDialogVisible = ref(false)
 const editing = ref(null)
-const form = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', parent_id: null })
+const form = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, parent_id: null })
+const portChildDevices = computed(() =>
+  editing.value ? (props.node.children || []).map((c) => ({ id: c.id, name: c.name })) : []
+)
 
 function openCreate(parentId) {
   editing.value = null
-  form.value = { name: '', type: 'group', ip_address: '', port: null, location: '', parent_id: parentId }
+  form.value = { name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, parent_id: parentId }
   dialogVisible.value = true
 }
 
@@ -27,9 +32,20 @@ function openEdit() {
     ip_address: props.node.ip_address || '',
     port: props.node.port,
     location: props.node.location || '',
+    port_count: props.node.port_count ?? null,
+    uplink_port: props.node.uplink_port ?? null,
+    port_bindings: props.node.port_bindings ?? {},
     parent_id: props.node.parent_id,
   }
   dialogVisible.value = true
+}
+
+function openPortDialog() {
+  portDialogVisible.value = true
+}
+
+function onPortBindingsSave(bindings) {
+  form.value.port_bindings = bindings
 }
 
 async function submit() {
@@ -44,6 +60,9 @@ async function submit() {
     ip_address: form.value.ip_address || null,
     port: form.value.port || null,
     location: form.value.location || null,
+    port_count: form.value.port_count,
+    uplink_port: form.value.uplink_port,
+    port_bindings: Object.keys(form.value.port_bindings).length ? form.value.port_bindings : null,
   }
   try {
     if (editing.value) {
@@ -181,12 +200,29 @@ onMounted(() => {
       <el-form-item label="位置">
         <el-input v-model="form.location" placeholder="如：机房A/机架1（可选）" />
       </el-form-item>
+      <el-form-item v-if="form.type === 'switch' || form.type === 'unmanaged_switch'" label="端口总数">
+        <el-input-number v-model="form.port_count" :min="1" :max="48" />
+      </el-form-item>
+      <el-form-item v-if="form.type === 'switch' || form.type === 'unmanaged_switch'" label="上联端口">
+        <el-input-number v-model="form.uplink_port" :min="1" :max="48" />
+      </el-form-item>
+      <el-form-item v-if="form.type === 'switch' || form.type === 'unmanaged_switch'" label="端口绑定">
+        <el-button size="small" @click="openPortDialog">配置端口绑定</el-button>
+      </el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="dialogVisible = false">取消</el-button>
       <el-button type="primary" @click="submit">保存</el-button>
     </template>
   </el-dialog>
+
+  <PortBindingDialog
+    v-model="portDialogVisible"
+    :port-count="form.port_count || 0"
+    :bindings="form.port_bindings"
+    :child-devices="portChildDevices"
+    @save="onPortBindingsSave"
+  />
 </template>
 
 <style scoped>

@@ -89,7 +89,7 @@ function mountTree(command = 'add-child', node = defaultNode) {
           template: '<div class="dlg"><slot /><slot name="footer" /></div>',
         },
         'el-form': { template: '<div><slot /></div>' },
-        'el-form-item': { template: '<div><slot /></div>' },
+        'el-form-item': { template: '<div>{{ $attrs.label }}<slot /></div>' },
         'el-input': {
           props: ['modelValue'],
           emits: ['update:modelValue'],
@@ -237,5 +237,60 @@ describe('DeviceTree 类型下拉', () => {
     expect(values).toContain('nvr')
     expect(values).toContain('nas2')
     expect(values).toContain('group')
+  })
+})
+
+describe('DeviceTree 交换机端口字段', () => {
+  const switchNode = {
+    id: 3,
+    name: 'SW',
+    parent_id: 1,
+    type: 'switch',
+    ip_address: '10.0.0.3',
+    port_count: 4,
+    uplink_port: 1,
+    port_bindings: {},
+    status: 'unknown',
+    children: [{ id: 4, name: 'sub', parent_id: 3, type: 'server', status: 'unknown', children: [] }],
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('交换机类型编辑显示端口字段', async () => {
+    const wrapper = mountTree('edit', switchNode)
+    await wrapper.find('.dd').trigger('click')
+    expect(wrapper.text()).toContain('端口总数')
+    expect(wrapper.text()).toContain('上联端口')
+    expect(wrapper.text()).toContain('配置端口绑定')
+  })
+
+  it('非交换机类型不显示端口字段', async () => {
+    const wrapper = mountTree('edit', defaultNode)
+    await wrapper.find('.dd').trigger('click')
+    expect(wrapper.text()).not.toContain('端口总数')
+    expect(wrapper.text()).not.toContain('配置端口绑定')
+  })
+
+  it('配置端口绑定打开弹窗并保存绑定', async () => {
+    updateMock.mockResolvedValue({})
+    const wrapper = mountTree('edit', switchNode)
+    await wrapper.find('.dd').trigger('click')
+    await wrapper.findAll('button').find((b) => b.text() === '配置端口绑定').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.port-row').length).toBe(4)
+    // 第一行绑定子设备 id 4（直接子节点）
+    await wrapper.findAll('.port-row').at(0).find('select').setValue('4')
+    // 端口弹窗保存（DOM 中位于设备弹窗之后，取最后一个"保存"）
+    const saves = wrapper.findAll('button').filter((b) => b.text() === '保存')
+    await saves.at(-1).trigger('click')
+    await wrapper.vm.$nextTick()
+    // 设备弹窗保存
+    await wrapper.findAll('button').filter((b) => b.text() === '保存').at(0).trigger('click')
+    await flushPromises()
+    expect(updateMock).toHaveBeenCalledWith(3, expect.objectContaining({
+      port_bindings: { 1: { target_id: '4', type: 'downlink' } },
+    }))
   })
 })
