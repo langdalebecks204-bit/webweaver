@@ -79,6 +79,9 @@ def _flatten_devices(devices: list[Device]) -> list[dict]:
             "ip_address": d.ip_address,
             "port": d.port,
             "location": d.location,
+            "port_count": d.port_count,
+            "uplink_port": d.uplink_port,
+            "port_bindings": d.port_bindings,
             "order_index": d.order_index,
             "parent_id": d.parent_id,
         }
@@ -167,6 +170,9 @@ def _import_devices(
             ip_address=item.get("ip_address"),
             port=item.get("port"),
             location=item.get("location"),
+            port_count=item.get("port_count"),
+            uplink_port=item.get("uplink_port"),
+            port_bindings=item.get("port_bindings"),
             order_index=item.get("order_index") or 0,
             parent_id=parent_id,
         )

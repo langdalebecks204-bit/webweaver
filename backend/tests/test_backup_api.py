@@ -30,7 +30,8 @@ def _tree(client, admin_headers):
     g = client.post("/api/devices", headers=admin_headers,
                     json={"name": "grp", "type": "group", "parent_id": root["id"]}).json()
     client.post("/api/devices", headers=admin_headers,
-                json={"name": "sw1", "type": "switch", "ip_address": "10.0.0.1", "parent_id": g["id"]})
+                json={"name": "sw1", "type": "switch", "ip_address": "10.0.0.1",
+                      "parent_id": g["id"], "port_count": 8, "uplink_port": 1})
     client.post("/api/devices", headers=admin_headers,
                 json={"name": "noip", "type": "switch", "parent_id": g["id"]})
     client.post("/api/external", headers=admin_headers,
@@ -318,3 +319,33 @@ def _upload_path(image_url: str):
     from app.config import settings
 
     return Path(settings.upload_dir) / Path(image_url).name
+
+
+def test_export_includes_port_fields(client, admin_headers):
+    _tree(client, admin_headers)
+    data = _export_json(client, admin_headers)
+    sw1 = next(d for d in data["devices"] if d["name"] == "sw1")
+    assert sw1["port_count"] == 8
+    assert sw1["uplink_port"] == 1
+
+
+def test_import_restores_port_fields(client, admin_headers):
+    _tree(client, admin_headers)
+    data = _export_json(client, admin_headers)
+    r = client.post("/api/backup/import", headers=admin_headers,
+                    json={"mode": "replace"}, content=json.dumps(data).encode())
+    assert r.status_code == 200
+    got = client.get("/api/devices", headers=admin_headers).json()
+    sw1 = next(d for d in got if d["name"] == "sw1")
+    assert sw1["port_count"] == 8
+    assert sw1["uplink_port"] == 1
+
+
+def test_import_old_backup_without_ports(client, admin_headers):
+    data = {"version": 2, "devices": [{"id": 1, "name": "old", "type": "switch"}]}
+    r = client.post("/api/backup/import", headers=admin_headers,
+                    json={"mode": "replace"}, content=json.dumps(data).encode())
+    assert r.status_code == 200
+    got = client.get("/api/devices", headers=admin_headers).json()
+    assert got[0]["name"] == "old"
+    assert got[0]["port_count"] is None
