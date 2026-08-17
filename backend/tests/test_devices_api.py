@@ -224,3 +224,60 @@ def test_recheck_group_with_ip(client, admin_headers, monkeypatch):
     r = client.post(f"/api/devices/{created['id']}/recheck", headers=admin_headers)
     assert r.status_code == 200
     assert r.json()["checked"][0]["status"] == "online"
+
+
+def test_create_switch_with_ports(client, admin_headers):
+    r = client.post(
+        "/api/devices", headers=admin_headers,
+        json={"name": "SW", "type": "unmanaged_switch", "port_count": 8,
+              "uplink_port": 1,
+              "port_bindings": {"1": {"target_id": 99, "type": "uplink"}}},
+    )
+    assert r.status_code == 409  # target 99 不存在
+
+
+def test_create_unmanaged_switch_serializes_ports(client, admin_headers):
+    created = client.post(
+        "/api/devices", headers=admin_headers,
+        json={"name": "SW", "type": "unmanaged_switch", "port_count": 8, "uplink_port": 1},
+    )
+    assert created.status_code == 201
+    body = created.json()
+    assert body["port_count"] == 8
+    assert body["uplink_port"] == 1
+    assert body["port_bindings"] is None
+
+    got = client.get(f"/api/devices/{body['id']}", headers=admin_headers)
+    assert got.json()["port_count"] == 8
+    assert got.json()["uplink_port"] == 1
+
+
+def test_switch_port_bindings_roundtrip(client, admin_headers):
+    target = client.post("/api/devices", headers=admin_headers,
+                         json={"name": "T", "type": "terminal", "ip_address": "1.1.1.1"}).json()
+    sw = client.post("/api/devices", headers=admin_headers,
+                     json={"name": "SW", "type": "switch", "port_count": 8,
+                           "port_bindings": {"2": {"target_id": target["id"], "type": "downlink"}}})
+    assert sw.status_code == 201
+    body = sw.json()
+    assert body["port_bindings"]["2"]["target_id"] == target["id"]
+
+    upd = client.put(f"/api/devices/{body['id']}", headers=admin_headers,
+                     json={"port_bindings": {"3": {"target_id": target["id"], "type": "downlink"}}})
+    assert upd.status_code == 200
+    assert upd.json()["port_bindings"]["3"]["target_id"] == target["id"]
+
+
+def test_switch_port_out_of_range(client, admin_headers):
+    r = client.post("/api/devices", headers=admin_headers,
+                    json={"name": "SW", "type": "switch", "port_count": 4,
+                          "port_bindings": {"5": {"target_id": 1, "type": "downlink"}}})
+    assert r.status_code == 409
+
+
+def test_non_switch_drops_port_fields(client, admin_headers):
+    r = client.post("/api/devices", headers=admin_headers,
+                    json={"name": "TERM", "type": "terminal", "port_count": 8, "uplink_port": 1})
+    assert r.status_code == 201
+    assert r.json()["port_count"] is None
+    assert r.json()["uplink_port"] is None

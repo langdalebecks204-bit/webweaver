@@ -7,6 +7,23 @@ from app.schemas import DeviceCreate, DeviceUpdate
 from app.services.device_types import is_valid_type
 
 
+_SWITCH_TYPES = {"switch", "unmanaged_switch"}
+
+
+def _validate_port_fields(db: Session, data: dict, port_count: int | None) -> None:
+    bindings = data.get("port_bindings")
+    if not bindings:
+        return
+    for key, binding in bindings.items():
+        if not key.isdigit():
+            raise ValueError("port binding key must be numeric")
+        port = int(key)
+        if port_count is not None and (port < 1 or port > port_count):
+            raise ValueError(f"port {port} out of range 1..{port_count}")
+        if db.get(Device, binding["target_id"]) is None:
+            raise ValueError(f"port binding target {binding['target_id']} not found")
+
+
 def device_to_dict(d: Device) -> dict:
     return {
         "id": d.id,
@@ -17,6 +34,9 @@ def device_to_dict(d: Device) -> dict:
         "port": d.port,
         "location": d.location,
         "image_url": d.image_url,
+        "port_count": d.port_count,
+        "uplink_port": d.uplink_port,
+        "port_bindings": d.port_bindings,
         "status": d.status,
         "latency_ms": d.latency_ms,
         "last_check": d.last_check.replace(tzinfo=timezone.utc).isoformat()
@@ -75,7 +95,14 @@ def create_device(db: Session, data: DeviceCreate) -> Device:
     ).first()
     if dup is not None:
         raise ValueError("device name already exists under this parent")
-    device = Device(**data.model_dump())
+    payload = data.model_dump()
+    if data.type in _SWITCH_TYPES:
+        _validate_port_fields(db, payload, payload.get("port_count"))
+    else:
+        payload.pop("port_count", None)
+        payload.pop("uplink_port", None)
+        payload.pop("port_bindings", None)
+    device = Device(**payload)
     db.add(device)
     db.commit()
     db.refresh(device)
@@ -90,6 +117,12 @@ def update_device(db: Session, device_id: int, data: DeviceUpdate) -> Device:
     changes = data.model_dump(exclude_unset=True)
     if "type" in changes and not is_valid_type(db, changes["type"]):
         raise ValueError(f"invalid device type: {changes['type']}")
+    if changes.get("type", device.type) in _SWITCH_TYPES:
+        _validate_port_fields(db, changes, changes.get("port_count", device.port_count))
+    else:
+        changes.pop("port_count", None)
+        changes.pop("uplink_port", None)
+        changes.pop("port_bindings", None)
     new_parent_id = changes.get("parent_id", device.parent_id)
     new_name = changes.get("name", device.name)
 

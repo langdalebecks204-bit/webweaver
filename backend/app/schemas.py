@@ -1,6 +1,12 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class PortBinding(BaseModel):
+    target_id: int
+    type: Literal["uplink", "downlink"]
 
 
 class LoginRequest(BaseModel):
@@ -28,6 +34,9 @@ class DeviceBase(BaseModel):
     ip_address: str | None = None
     port: int | None = Field(default=None, ge=1, le=65535)
     location: str | None = Field(default=None, max_length=100)
+    port_count: int | None = Field(default=None, ge=1, le=48)
+    uplink_port: int | None = Field(default=None, ge=1, le=48)
+    port_bindings: dict[str, PortBinding] | None = None
     order_index: int = 0
 
 
@@ -41,6 +50,9 @@ class DeviceUpdate(BaseModel):
     ip_address: str | None = None
     port: int | None = Field(default=None, ge=1, le=65535)
     location: str | None = Field(default=None, max_length=100)
+    port_count: int | None = Field(default=None, ge=1, le=48)
+    uplink_port: int | None = Field(default=None, ge=1, le=48)
+    port_bindings: dict[str, PortBinding] | None = None
     parent_id: int | None = None
     order_index: int | None = None
 
