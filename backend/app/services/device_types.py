@@ -17,6 +17,7 @@ BUILTIN_TYPES = [
     "printer",
     "nas",
     "ups",
+    "unmanaged_switch",
 ]
 
 CUSTOM_TYPES_KEY = "custom_device_types"

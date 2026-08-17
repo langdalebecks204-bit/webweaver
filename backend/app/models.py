@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -23,6 +23,9 @@ class Device(Base):
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     location: Mapped[str | None] = mapped_column(String(100), nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    port_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    uplink_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    port_bindings: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="unknown")
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_check: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

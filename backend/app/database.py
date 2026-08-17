@@ -34,6 +34,9 @@ def get_db():
 _DEVICE_ADDED_COLUMNS = {
     "location": "VARCHAR(100)",
     "image_url": "VARCHAR(255)",
+    "port_count": "INTEGER",
+    "uplink_port": "INTEGER",
+    "port_bindings": "TEXT",
 }
 
 

@@ -8,6 +8,10 @@ def test_builtin_types_contains_new_ones():
         assert t in dt.BUILTIN_TYPES
 
 
+def test_unmanaged_switch_is_builtin():
+    assert "unmanaged_switch" in dt.BUILTIN_TYPES
+
+
 def test_custom_types_default_empty():
     with SessionLocal() as db:
         assert dt.get_custom_types(db) == []
