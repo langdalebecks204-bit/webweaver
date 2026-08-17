@@ -11,6 +11,7 @@ export const DEVICE_TYPE_LABELS = {
   printer: '打印机',
   nas: 'NAS',
   ups: 'UPS',
+  unmanaged_switch: '非管理型交换机',
 }
 
 export const DEVICE_TYPE_ICONS = {
@@ -26,6 +27,7 @@ export const DEVICE_TYPE_ICONS = {
   printer: 'Printer',
   nas: 'Files',
   ups: 'Lightning',
+  unmanaged_switch: 'Connection',
 }
 
 export const DEFAULT_TYPE_ICON = 'Monitor'

@@ -13,6 +13,7 @@ import UsersPanel from '../components/UsersPanel.vue'
 import BackupPanel from '../components/BackupPanel.vue'
 import DeviceHistory from '../components/DeviceHistory.vue'
 import TopologyView from '../components/TopologyView.vue'
+import PortBindingDialog from '../components/PortBindingDialog.vue'
 import { allTypeOptions, typeLabel } from '../utils/deviceTypes'
 
 const router = useRouter()
@@ -30,8 +31,10 @@ const targetEditing = ref(null)
 const targetForm = ref({ name: '', ip_address: '', domain: '', port: null })
 const deviceDialogVisible = ref(false)
 const deviceEditing = ref(null)
-const deviceForm = ref({ name: '', type: 'group', ip_address: '', port: null, location: '' })
+const deviceForm = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {} })
 const deviceCandidates = ref([])
+const portDialogVisible = ref(false)
+const portChildDevices = ref([])
 const isAdmin = computed(() => auth.user?.role === 'admin')
 
 const typeOptions = computed(() => allTypeOptions(settings.builtinTypes, settings.customTypes))
@@ -217,14 +220,26 @@ function openDeviceEdit(device) {
   walk(store.tree, 0)
   deviceCandidates.value = candidates
   deviceEditing.value = device
+  portChildDevices.value = (device.children || []).map((c) => ({ id: c.id, name: c.name }))
   deviceForm.value = {
     name: device.name,
     type: device.type,
     ip_address: device.ip_address || '',
     port: device.port,
     location: device.location || '',
+    port_count: device.port_count ?? null,
+    uplink_port: device.uplink_port ?? null,
+    port_bindings: device.port_bindings ?? {},
   }
   deviceDialogVisible.value = true
+}
+
+function openPortDialog() {
+  portDialogVisible.value = true
+}
+
+function onPortBindingsSave(bindings) {
+  deviceForm.value.port_bindings = bindings
 }
 
 async function onSaveDevice() {
@@ -235,6 +250,9 @@ async function onSaveDevice() {
     ip_address: deviceForm.value.ip_address || null,
     port: deviceForm.value.port || null,
     location: deviceForm.value.location || null,
+    port_count: deviceForm.value.port_count,
+    uplink_port: deviceForm.value.uplink_port,
+    port_bindings: Object.keys(deviceForm.value.port_bindings).length ? deviceForm.value.port_bindings : null,
   }
   try {
     await store.update(deviceEditing.value.id, payload)
@@ -466,12 +484,29 @@ async function onSaveDevice() {
           <el-form-item label="位置">
             <el-input v-model="deviceForm.location" placeholder="如：机房A/机架1（可选）" />
           </el-form-item>
+          <el-form-item v-if="deviceForm.type === 'switch' || deviceForm.type === 'unmanaged_switch'" label="端口总数">
+            <el-input-number v-model="deviceForm.port_count" :min="1" :max="48" />
+          </el-form-item>
+          <el-form-item v-if="deviceForm.type === 'switch' || deviceForm.type === 'unmanaged_switch'" label="上联端口">
+            <el-input-number v-model="deviceForm.uplink_port" :min="1" :max="48" />
+          </el-form-item>
+          <el-form-item v-if="deviceForm.type === 'switch' || deviceForm.type === 'unmanaged_switch'" label="端口绑定">
+            <el-button size="small" @click="openPortDialog">配置端口绑定</el-button>
+          </el-form-item>
         </el-form>
         <template #footer>
           <el-button @click="deviceDialogVisible = false">取消</el-button>
           <el-button type="primary" @click="onSaveDevice">保存</el-button>
         </template>
       </el-dialog>
+
+      <PortBindingDialog
+        v-model="portDialogVisible"
+        :port-count="deviceForm.port_count || 0"
+        :bindings="deviceForm.port_bindings"
+        :child-devices="portChildDevices"
+        @save="onPortBindingsSave"
+      />
     </el-main>
   </el-container>
 </template>

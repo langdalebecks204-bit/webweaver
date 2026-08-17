@@ -143,6 +143,40 @@ vi.mock('vue-router', () => ({
 
 import MainView from '../MainView.vue'
 
+describe('MainView 交换机端口字段', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('交换机类显示端口字段与配置按钮', async () => {
+    authState.role = 'admin'
+    updateMock.mockResolvedValue({})
+    const wrapper = mountView()
+    await flushPromises()
+    wrapper.vm.viewMode = 'table'
+    await wrapper.vm.$nextTick()
+    await wrapper.find('.table-edit').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('端口总数')
+    expect(wrapper.text()).toContain('上联端口')
+    expect(wrapper.text()).toContain('配置端口绑定')
+  })
+
+  it('非交换机类不显示端口字段', async () => {
+    authState.role = 'admin'
+    const wrapper = mountView()
+    await flushPromises()
+    wrapper.vm.viewMode = 'table'
+    await wrapper.vm.$nextTick()
+    await wrapper.find('.table-edit').trigger('click')
+    await flushPromises()
+    wrapper.vm.deviceForm.type = 'group'
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).not.toContain('端口总数')
+    expect(wrapper.text()).not.toContain('配置端口绑定')
+  })
+})
+
 describe('MainView 拓扑图页签', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -195,7 +229,7 @@ function mountView() {
           template: '<div v-if="modelValue" class="dlg"><slot /><slot name="footer" /></div>',
         },
         'el-form': { template: '<div><slot /></div>' },
-        'el-form-item': { template: '<div><slot /></div>' },
+        'el-form-item': { template: '<div>{{ $attrs.label }}<slot /></div>' },
         'el-input': {
           props: ['modelValue'],
           emits: ['update:modelValue'],

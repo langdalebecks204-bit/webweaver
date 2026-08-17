@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DEVICE_TYPE_ICONS, allTypeOptions, typeIcon, typeLabel } from '../deviceTypes'
+import { DEVICE_TYPE_ICONS, DEVICE_TYPE_LABELS, allTypeOptions, typeIcon, typeLabel } from '../deviceTypes'
 
 describe('deviceTypes', () => {
   it('内置类型有中文标签', () => {
@@ -16,6 +16,11 @@ describe('deviceTypes', () => {
     expect(DEVICE_TYPE_ICONS.camera).toBe('VideoCamera')
     expect(typeIcon('nas2', ['nas2'])).toBe('Monitor')
     expect(typeIcon('bogus')).toBe('QuestionFilled')
+  })
+
+  it('unmanaged_switch 有标签与图标', () => {
+    expect(DEVICE_TYPE_LABELS.unmanaged_switch).toBe('非管理型交换机')
+    expect(DEVICE_TYPE_ICONS.unmanaged_switch).toBeTruthy()
   })
 
   it('allTypeOptions 合并内置中文与自定义原值', () => {
