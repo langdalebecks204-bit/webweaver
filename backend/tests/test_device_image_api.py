@@ -181,3 +181,61 @@ def _upload_path(image_url: str) -> str:
     from app.config import settings
 
     return os.path.join(settings.upload_dir, os.path.basename(image_url))
+
+
+def _make_jpeg_with_orientation(width=4032, height=3024, orientation=6) -> bytes:
+    from PIL.ExifTags import Base as ExifTags
+
+    img = Image.new("RGB", (width, height), (40, 90, 160))
+    exif = Image.Exif()
+    exif[ExifTags.Orientation] = orientation
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=92, exif=exif)
+    return buf.getvalue()
+
+
+def test_strip_exif_removes_exif_and_returns_orientation(client, admin_headers):
+    from app.services.image_service import strip_exif
+
+    raw = _make_jpeg_with_orientation()
+    clean, orientation = strip_exif(raw)
+    assert clean is not None
+    assert orientation == 6
+    assert b"Exif\x00\x00" not in clean
+    opened = Image.open(io.BytesIO(clean))
+    assert opened.getexif().get(0x0112) is None
+
+
+def test_strip_exif_returns_none_for_image_without_exif(client, admin_headers):
+    from app.services.image_service import strip_exif
+
+    buf = io.BytesIO()
+    Image.new("RGB", (200, 200), (1, 2, 3)).save(buf, format="PNG")
+    clean, orientation = strip_exif(buf.getvalue())
+    assert clean is None
+    assert orientation is None
+
+
+def test_process_image_safe_reembeds_orientation(client, admin_headers):
+    from app.services.image_service import strip_exif, _process_image_safe
+
+    raw = _make_jpeg_with_orientation()
+    clean, orientation = strip_exif(raw)
+    out = _process_image_safe(clean, orientation)
+    assert out[:2] == b"\xff\xd8"
+    saved = Image.open(io.BytesIO(out))
+    assert saved.getexif().get(0x0112) == 6
+
+
+def test_upload_exif_jpeg_succeeds_and_keeps_orientation(client, admin_headers):
+    created = client.post("/api/devices", headers=admin_headers,
+                          json={"name": "S1", "type": "switch"})
+    cid = created.json()["id"]
+    raw = _make_jpeg_with_orientation()
+    r = _upload(client, cid, admin_headers, raw, filename="phone.jpg", content_type="image/jpeg")
+    assert r.status_code == 200
+    path = _upload_path(r.json()["image_url"])
+    assert os.path.exists(path)
+    saved = Image.open(path)
+    assert saved.getexif().get(0x0112) == 6
+    assert os.path.getsize(path) <= 300 * 1024
