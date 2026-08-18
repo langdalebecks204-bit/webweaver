@@ -170,4 +170,33 @@ describe('TopologyView', () => {
     expect(wrapper.text()).toContain('字号')
     expect(wrapper.text()).toContain('显示标签')
   })
+
+  it('容器尺寸变化时同步画布尺寸', async () => {
+    let observerCb = null
+    const RealResizeObserver = window.ResizeObserver
+    window.ResizeObserver = class {
+      constructor(cb) {
+        observerCb = cb
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    try {
+      wrapper = mount(TopologyView, {
+        global: { stubs: { ElSlider: true, ElSwitch: true } },
+      })
+      await flushPromises()
+      expect(createMock).toHaveBeenCalledTimes(1)
+      const graph = wrapper.find('.graph').element
+      Object.defineProperty(graph, 'clientWidth', { value: 900, configurable: true })
+      Object.defineProperty(graph, 'clientHeight', { value: 600, configurable: true })
+      observerCb([], {})
+      await flushPromises()
+      expect(fgMock.width).toHaveBeenCalledWith(900)
+      expect(fgMock.height).toHaveBeenCalledWith(600)
+    } finally {
+      window.ResizeObserver = RealResizeObserver
+    }
+  })
 })

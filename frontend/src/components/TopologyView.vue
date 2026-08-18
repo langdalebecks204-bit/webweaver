@@ -21,6 +21,15 @@ const STATUS_COLORS = {
 }
 
 let fg = null
+let resizeObserver = null
+
+function syncSize() {
+  if (!fg || !graphEl.value) return
+  const w = graphEl.value.clientWidth
+  const h = graphEl.value.clientHeight
+  if (!w || !h) return
+  fg.width(w).height(h)
+}
 
 function particleCount(link) {
   const target = link.target
@@ -107,6 +116,10 @@ function renderGraph() {
     })
     .width(graphEl.value.clientWidth)
     .height(graphEl.value.clientHeight)
+  if (!resizeObserver && typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(syncSize)
+    resizeObserver.observe(graphEl.value)
+  }
 }
 
 watch(
@@ -132,6 +145,10 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
   if (fg) {
     fg.destroy()
     fg = null
