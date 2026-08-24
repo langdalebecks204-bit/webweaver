@@ -7,10 +7,33 @@ import { treeToGraph } from '../utils/treeToGraph'
 
 const store = useDevicesStore()
 const graphEl = ref(null)
+const wrapEl = ref(null)
 const error = ref('')
 const hoverNodeId = ref(null)
 const labelFontSize = ref(6)
 const showLabels = ref(true)
+const isFullscreen = ref(false)
+
+const emit = defineEmits(['back-home'])
+
+function toggleFullscreen() {
+  const el = wrapEl.value
+  if (!el) return
+  if (!document.fullscreenElement) {
+    el.requestFullscreen?.()
+  } else {
+    document.exitFullscreen?.()
+  }
+}
+
+function onFsChange() {
+  isFullscreen.value = document.fullscreenElement === wrapEl.value
+}
+
+function backHome() {
+  if (document.fullscreenElement) document.exitFullscreen?.()
+  emit('back-home')
+}
 
 const graphData = computed(() => treeToGraph(store.tree))
 
@@ -155,6 +178,7 @@ watch(
 )
 
 onMounted(async () => {
+  document.addEventListener('fullscreenchange', onFsChange)
   await nextTick()
   try {
     renderGraph()
@@ -164,6 +188,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('fullscreenchange', onFsChange)
   if (resizeObserver) {
     resizeObserver.disconnect()
     resizeObserver = null
@@ -176,7 +201,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="topology-wrap">
+  <div ref="wrapEl" class="topology-wrap" :class="{ fullscreen: isFullscreen }">
     <div v-if="error" class="error">{{ error }}</div>
     <template v-else-if="graphData.nodes.length">
       <div class="topo-toolbar">
@@ -190,7 +215,11 @@ onBeforeUnmount(() => {
         />
         <span class="label">显示标签</span>
         <el-switch v-model="showLabels" />
+        <el-button size="small" class="fullscreen-btn" @click="toggleFullscreen">
+          {{ isFullscreen ? '退出全屏' : '全屏' }}
+        </el-button>
       </div>
+      <a v-if="isFullscreen" class="back-home" href="#" @click.prevent="backHome">← 返回主页</a>
       <div ref="graphEl" class="graph" />
     </template>
     <div v-else class="empty">暂无设备</div>
@@ -206,6 +235,27 @@ onBeforeUnmount(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+.topology-wrap:fullscreen {
+  height: 100vh;
+  border-radius: 0;
+}
+.back-home {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  z-index: 10;
+  color: #94a3b8;
+  font-size: 13px;
+  text-decoration: none;
+  background: rgba(17, 28, 49, 0.85);
+  border: 1px solid #1e293b;
+  border-radius: 4px;
+  padding: 4px 10px;
+}
+.back-home:hover {
+  color: #e2e8f0;
 }
 .topo-toolbar {
   display: flex;
@@ -223,6 +273,9 @@ onBeforeUnmount(() => {
 .topo-toolbar .font-slider {
   width: 160px;
   margin: 0 8px;
+}
+.topo-toolbar .fullscreen-btn {
+  margin-left: auto;
 }
 .graph {
   flex: 1;

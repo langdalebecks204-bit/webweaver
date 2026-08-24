@@ -374,7 +374,7 @@ async function onSaveDevice() {
           </el-card>
         </el-tab-pane>
         <el-tab-pane lazy label="拓扑图" name="topology">
-          <el-card><TopologyView /></el-card>
+          <el-card><TopologyView @back-home="activeTab = 'devices'" /></el-card>
         </el-tab-pane>
         <el-tab-pane label="外网" name="external">
           <el-card>

@@ -269,4 +269,47 @@ describe('TopologyView', () => {
     expect(baselines).toContain('middle')
     expect(ctx.fillText).toHaveBeenCalledWith('🔀', 50, 60)
   })
+
+  it('点击全屏按钮请求全屏，进入全屏后显示返回主页链接', async () => {
+    wrapper = mount(TopologyView, {
+      global: { stubs: { ElSlider: true, ElSwitch: true } },
+    })
+    await flushPromises()
+    const wrapEl = wrapper.find('.topology-wrap').element
+    const reqSpy = vi.fn()
+    wrapEl.requestFullscreen = reqSpy
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      get: () => null,
+    })
+    expect(wrapper.find('.back-home').exists()).toBe(false)
+    await wrapper.find('.fullscreen-btn').trigger('click')
+    expect(reqSpy).toHaveBeenCalledTimes(1)
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      get: () => wrapEl,
+    })
+    document.dispatchEvent(new Event('fullscreenchange'))
+    await flushPromises()
+    expect(wrapper.find('.back-home').exists()).toBe(true)
+  })
+
+  it('返回主页退出全屏并向外发出 back-home', async () => {
+    wrapper = mount(TopologyView, {
+      global: { stubs: { ElSlider: true, ElSwitch: true } },
+    })
+    await flushPromises()
+    const wrapEl = wrapper.find('.topology-wrap').element
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      get: () => wrapEl,
+    })
+    document.dispatchEvent(new Event('fullscreenchange'))
+    await flushPromises()
+    const exitSpy = vi.fn()
+    document.exitFullscreen = exitSpy
+    await wrapper.find('.back-home').trigger('click')
+    expect(exitSpy).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('back-home')).toBeTruthy()
+  })
 })
