@@ -1,3 +1,5 @@
+中文 | [English](README.en.md)
+
 # 织网 (WebWeaver)
 
 树状结构自动化网络状态检测平台。后台定时/手动巡检设备（ICMP Ping + 可选 TCP 端口探测），前端以树形展示设备层级与实时状态，支持巡检历史记录与按小时/按天平均延时图表。
@@ -57,14 +59,14 @@ docker run -d --name weaver \
 
 ```bash
 # 固定 tag 方式（推荐）
-docker pull ghcr.io/langdalebecks204-bit/webweaver:0.2.0
+docker pull ghcr.io/langdalebecks204-bit/webweaver:0.4.13
 docker rm -f weaver
 docker run -d --name weaver \
   -p 8000:8000 \
   --cap-add=NET_RAW \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=请改成随机长字符串 \
-  ghcr.io/langdalebecks204-bit/webweaver:0.2.0
+  ghcr.io/langdalebecks204-bit/webweaver:0.4.13
 
 # 或 compose 方式
 docker compose pull
