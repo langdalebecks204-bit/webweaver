@@ -43,9 +43,16 @@ describe('TopologyView', () => {
       parent_id: null,
       children: [],
     })
+    let graphStore = { nodes: [], links: [] }
     fgMock = {
       backgroundColor: vi.fn(() => fgMock),
-      graphData: vi.fn(() => fgMock),
+      graphData: vi.fn((...args) => {
+        if (args.length) {
+          graphStore = args[0]
+          return fgMock
+        }
+        return graphStore
+      }),
       nodeRelSize: vi.fn(() => fgMock),
       nodeCanvasObjectMode: vi.fn(() => fgMock),
       nodeCanvasObject: vi.fn(() => fgMock),
@@ -198,6 +205,43 @@ describe('TopologyView', () => {
     } finally {
       window.ResizeObserver = RealResizeObserver
     }
+  })
+
+  it('悬停节点不重置图数据', async () => {
+    wrapper = mount(TopologyView, {
+      global: { stubs: { ElSlider: true, ElSwitch: true } },
+    })
+    await flushPromises()
+    const before = fgMock.graphData.mock.calls.length
+    fgMock.onNodeHover.mock.calls[0][0]({ id: 1 })
+    await flushPromises()
+    expect(fgMock.graphData.mock.calls.length).toBe(before)
+  })
+
+  it('轮询刷新时复用节点对象保留坐标', async () => {
+    treeMock.splice(0, treeMock.length, {
+      id: 5,
+      name: '核心交换机',
+      type: 'switch',
+      status: 'online',
+      latency_ms: 3,
+      ip_address: '10.0.0.5',
+      parent_id: null,
+      children: [],
+    })
+    wrapper = mount(TopologyView, {
+      global: { stubs: { ElSlider: true, ElSwitch: true } },
+    })
+    await flushPromises()
+    const first = fgMock.graphData.mock.calls[0][0]
+    first.nodes[0].x = 123
+    first.nodes[0].y = -45
+    store().tree[0].status = 'offline'
+    await flushPromises()
+    const last = fgMock.graphData.mock.calls.at(-1)[0]
+    expect(last.nodes[0]).toBe(first.nodes[0])
+    expect(last.nodes[0].x).toBe(123)
+    expect(last.nodes[0].status).toBe('offline')
   })
 
   it('节点为大圆点并居中绘制类型图标', async () => {

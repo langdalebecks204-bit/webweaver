@@ -100,10 +100,6 @@ function drawNode(node, ctx) {
 
 function renderGraph() {
   if (!graphEl.value || !graphData.value.nodes.length) return
-  if (fg) {
-    fg.graphData(graphData.value)
-    return
-  }
   fg = new ForceGraph(graphEl.value)
     .backgroundColor('#0f172a')
     .graphData(graphData.value)
@@ -117,9 +113,6 @@ function renderGraph() {
     .linkDirectionalParticleColor(particleColor)
     .onNodeHover((node) => {
       hoverNodeId.value = node ? node.id : null
-      if (node) {
-        fg.graphData(graphData.value)
-      }
     })
     .width(graphEl.value.clientWidth)
     .height(graphEl.value.clientHeight)
@@ -129,13 +122,32 @@ function renderGraph() {
   }
 }
 
+const NODE_FIELDS = ['name', 'type', 'status', 'latency_ms', 'ip_address', 'val']
+
+function syncGraphData() {
+  if (!fg || !graphData.value.nodes.length) return
+  const prevNodes = fg.graphData().nodes || []
+  const byId = new Map(prevNodes.map((n) => [n.id, n]))
+  const nodes = graphData.value.nodes.map((n) => {
+    const old = byId.get(n.id)
+    if (old) {
+      for (const f of NODE_FIELDS) old[f] = n[f]
+      return old
+    }
+    return { ...n }
+  })
+  const links = graphData.value.links.map((l) => ({ source: l.source, target: l.target }))
+  fg.graphData({ nodes, links })
+}
+
 watch(
-  () => graphData.value.nodes.length,
+  graphData,
   async () => {
     if (!graphData.value.nodes.length) return
     await nextTick()
     try {
-      renderGraph()
+      if (fg) syncGraphData()
+      else renderGraph()
     } catch (e) {
       error.value = `图谱初始化失败：${e.message}`
     }
