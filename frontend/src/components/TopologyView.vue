@@ -215,11 +215,11 @@ onBeforeUnmount(() => {
         />
         <span class="label">显示标签</span>
         <el-switch v-model="showLabels" />
+        <a v-if="isFullscreen" class="back-home" href="#" @click.prevent="backHome">← 返回主页</a>
         <el-button size="small" class="fullscreen-btn" @click="toggleFullscreen">
           {{ isFullscreen ? '退出全屏' : '全屏' }}
         </el-button>
       </div>
-      <a v-if="isFullscreen" class="back-home" href="#" @click.prevent="backHome">← 返回主页</a>
       <div ref="graphEl" class="graph" />
     </template>
     <div v-else class="empty">暂无设备</div>
@@ -242,17 +242,11 @@ onBeforeUnmount(() => {
   border-radius: 0;
 }
 .back-home {
-  position: absolute;
-  top: 12px;
-  right: 16px;
-  z-index: 10;
+  margin-left: auto;
   color: #94a3b8;
   font-size: 13px;
   text-decoration: none;
-  background: rgba(17, 28, 49, 0.85);
-  border: 1px solid #1e293b;
-  border-radius: 4px;
-  padding: 4px 10px;
+  white-space: nowrap;
 }
 .back-home:hover {
   color: #e2e8f0;
