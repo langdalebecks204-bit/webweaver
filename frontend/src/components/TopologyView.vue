@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ForceGraph from 'force-graph'
 import { useDevicesStore } from '../stores/devices'
+import { typeGlyph } from '../utils/deviceTypes'
 import { treeToGraph } from '../utils/treeToGraph'
 
 const store = useDevicesStore()
@@ -67,7 +68,7 @@ function isHighlighted(node) {
 }
 
 function drawNode(node, ctx) {
-  const r = Math.max(4, Math.sqrt(node.val))
+  const r = Math.max(8, Math.sqrt(node.val))
   const color = STATUS_COLORS[node.status] || '#6b7280'
   const now = Date.now()
   let alpha = isHighlighted(node) ? 1 : 0.08
@@ -83,6 +84,12 @@ function drawNode(node, ctx) {
   ctx.fill()
   ctx.shadowBlur = 0
   ctx.globalAlpha = 1
+  ctx.fillStyle = 'rgba(255,255,255,0.92)'
+  ctx.font = '10px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(typeGlyph(node.type), node.x, node.y)
+  ctx.textBaseline = 'alphabetic'
   if (showLabels.value || node.id === hoverNodeId.value) {
     ctx.fillStyle = 'rgba(255,255,255,0.85)'
     ctx.font = `${labelFontSize.value}px sans-serif`

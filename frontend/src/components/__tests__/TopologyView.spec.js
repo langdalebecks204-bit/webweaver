@@ -129,7 +129,7 @@ describe('TopologyView', () => {
     await flushPromises()
     const draw = fgMock.nodeCanvasObject.mock.calls[0][0]
     const ctx = { fillStyle: '', font: '', textAlign: '', fillText: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), fill: vi.fn(), globalAlpha: 1, shadowColor: '', shadowBlur: 0 }
-    const node = { id: 3, name: '节点C', status: 'online', val: 8, x: 10, y: 10 }
+    const node = { id: 3, name: '节点C', type: 'terminal', status: 'online', val: 8, x: 10, y: 10 }
     draw(node, ctx)
     expect(ctx.font).toBe('6px sans-serif')
     // 修改字号
@@ -148,11 +148,11 @@ describe('TopologyView', () => {
     await flushPromises()
     const draw = fgMock.nodeCanvasObject.mock.calls[0][0]
     const ctx = { fillStyle: '', font: '', textAlign: '', fillText: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), fill: vi.fn(), globalAlpha: 1, shadowColor: '', shadowBlur: 0 }
-    const node = { id: 3, name: '节点C', status: 'online', val: 8, x: 10, y: 10 }
+    const node = { id: 3, name: '节点C', type: 'terminal', status: 'online', val: 8, x: 10, y: 10 }
     wrapper.vm.showLabels = false
     await flushPromises()
     draw(node, ctx)
-    expect(ctx.fillText).not.toHaveBeenCalled()
+    expect(ctx.fillText).not.toHaveBeenCalledWith('节点C', 10, expect.any(Number))
     // 模拟悬停
     fgMock.onNodeHover.mock.calls[0][0](node)
     draw(node, ctx)
@@ -198,5 +198,31 @@ describe('TopologyView', () => {
     } finally {
       window.ResizeObserver = RealResizeObserver
     }
+  })
+
+  it('节点为大圆点并居中绘制类型图标', async () => {
+    wrapper = mount(TopologyView, {
+      global: { stubs: { ElSlider: true, ElSwitch: true } },
+    })
+    await flushPromises()
+    const draw = fgMock.nodeCanvasObject.mock.calls[0][0]
+    const baselines = []
+    const ctx = {
+      get textBaseline() {
+        return this._tb
+      },
+      set textBaseline(v) {
+        baselines.push(v)
+        this._tb = v
+      },
+      fillStyle: '', font: '', textAlign: '',
+      fillText: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), fill: vi.fn(),
+      globalAlpha: 1, shadowColor: '', shadowBlur: 0,
+    }
+    const node = { id: 3, name: '核心交换机', type: 'switch', status: 'online', val: 8, x: 50, y: 60 }
+    draw(node, ctx)
+    expect(ctx.arc).toHaveBeenCalledWith(50, 60, 8, 0, 2 * Math.PI, false)
+    expect(baselines).toContain('middle')
+    expect(ctx.fillText).toHaveBeenCalledWith('🔀', 50, 60)
   })
 })
