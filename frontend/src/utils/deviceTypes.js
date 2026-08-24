@@ -33,6 +33,28 @@ export const DEVICE_TYPE_ICONS = {
 export const DEFAULT_TYPE_ICON = 'Monitor'
 export const UNKNOWN_TYPE_ICON = 'QuestionFilled'
 
+export const DEVICE_TYPE_GLYPHS = {
+  group: '📁',
+  server: '🖥️',
+  switch: '🔀',
+  terminal: '💻',
+  camera: '📷',
+  nvr: '🎛️',
+  router: '📡',
+  firewall: '🛡️',
+  ap: '📶',
+  printer: '🖨️',
+  nas: '💾',
+  ups: '🔋',
+  unmanaged_switch: '🔌',
+}
+
+export function typeGlyph(type) {
+  if (DEVICE_TYPE_GLYPHS[type]) return DEVICE_TYPE_GLYPHS[type]
+  if (type) return typeLabel(type)[0] || '?'
+  return '?'
+}
+
 export function typeLabel(type) {
   return DEVICE_TYPE_LABELS[type] || type
 }
