@@ -131,7 +131,7 @@ describe('TopologyView', () => {
     const ctx = { fillStyle: '', font: '', textAlign: '', fillText: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), fill: vi.fn(), globalAlpha: 1, shadowColor: '', shadowBlur: 0 }
     const node = { id: 3, name: '节点C', status: 'online', val: 8, x: 10, y: 10 }
     draw(node, ctx)
-    expect(ctx.font).toBe('9px sans-serif')
+    expect(ctx.font).toBe('6px sans-serif')
     // 修改字号
     const slider = wrapper.findComponent({ name: 'ElSlider' })
     expect(slider.exists()).toBe(true)

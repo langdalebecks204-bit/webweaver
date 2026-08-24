@@ -8,7 +8,7 @@ const store = useDevicesStore()
 const graphEl = ref(null)
 const error = ref('')
 const hoverNodeId = ref(null)
-const labelFontSize = ref(9)
+const labelFontSize = ref(6)
 const showLabels = ref(true)
 
 const graphData = computed(() => treeToGraph(store.tree))
