@@ -141,7 +141,7 @@ onMounted(() => {
 
 <template>
   <el-dropdown trigger="contextmenu" @command="onCommand">
-    <div class="node">
+    <div class="node" :class="props.node.status">
       <el-icon class="type-icon">
         <component :is="typeIcon(props.node.type, settingsStore.customTypes)" />
       </el-icon>
