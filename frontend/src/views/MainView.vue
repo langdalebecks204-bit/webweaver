@@ -594,21 +594,8 @@ async function onSaveDevice() {
 }
 
 /* ── tree connector lines ── */
-:deep(.el-tree-node__children .el-tree-node) {
-  position: relative;
-}
 :deep(.el-tree-node__content) {
   position: relative;
-}
-:deep(.el-tree-node__children::before) {
-  content: '';
-  position: absolute;
-  left: 19px;
-  top: 24px;
-  bottom: 12px;
-  width: 1px;
-  background: #dcdfe6;
-  z-index: 0;
 }
 :deep(.el-tree-node__content::before) {
   content: '';
@@ -621,36 +608,49 @@ async function onSaveDevice() {
   z-index: 0;
   transform: translateY(-0.5px);
 }
+:deep(.el-tree-node__children .el-tree-node) {
+  position: relative;
+}
+:deep(.el-tree-node__children .el-tree-node::after) {
+  content: '';
+  position: absolute;
+  left: 19px;
+  top: 0;
+  width: 1px;
+  height: 22px;
+  background: #dcdfe6;
+  z-index: 0;
+}
 
 /* status colors — online */
-:deep(.el-tree-node:has(.node.online) > .el-tree-node__children::before) {
+:deep(.el-tree-node:has(.node.online) > .el-tree-node__children .el-tree-node__content::before) {
   background: #67c23a;
 }
-:deep(.el-tree-node:has(.node.online) > .el-tree-node__children .el-tree-node__content::before) {
+:deep(.el-tree-node:has(.node.online) > .el-tree-node__children .el-tree-node::after) {
   background: #67c23a;
 }
 
 /* status colors — offline */
-:deep(.el-tree-node:has(.node.offline) > .el-tree-node__children::before) {
+:deep(.el-tree-node:has(.node.offline) > .el-tree-node__children .el-tree-node__content::before) {
   background: #f56c6c;
 }
-:deep(.el-tree-node:has(.node.offline) > .el-tree-node__children .el-tree-node__content::before) {
+:deep(.el-tree-node:has(.node.offline) > .el-tree-node__children .el-tree-node::after) {
   background: #f56c6c;
 }
 
 /* status colors — warning */
-:deep(.el-tree-node:has(.node.warning) > .el-tree-node__children::before) {
+:deep(.el-tree-node:has(.node.warning) > .el-tree-node__children .el-tree-node__content::before) {
   background: #e6a23c;
 }
-:deep(.el-tree-node:has(.node.warning) > .el-tree-node__children .el-tree-node__content::before) {
+:deep(.el-tree-node:has(.node.warning) > .el-tree-node__children .el-tree-node::after) {
   background: #e6a23c;
 }
 
 /* status colors — unknown */
-:deep(.el-tree-node:has(.node.unknown) > .el-tree-node__children::before) {
+:deep(.el-tree-node:has(.node.unknown) > .el-tree-node__children .el-tree-node__content::before) {
   background: #dcdfe6;
 }
-:deep(.el-tree-node:has(.node.unknown) > .el-tree-node__children .el-tree-node__content::before) {
+:deep(.el-tree-node:has(.node.unknown) > .el-tree-node__children .el-tree-node::after) {
   background: #dcdfe6;
 }
 </style>
