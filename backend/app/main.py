@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
         scheduler.shutdown()
 
 
-app = FastAPI(title="织网 WebWeaver", version="0.4.14", lifespan=lifespan)
+app = FastAPI(title="织网 WebWeaver", version="0.4.15", lifespan=lifespan)
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(devices.router, prefix="/api/devices", tags=["devices"])
