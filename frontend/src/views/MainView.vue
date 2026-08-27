@@ -613,8 +613,8 @@ async function onSaveDevice() {
 :deep(.el-tree-node__content::before) {
   content: '';
   position: absolute;
-  left: 19px;
-  right: 50%;
+  left: 11px;
+  width: 12px;
   top: 50%;
   height: 1px;
   background: #dcdfe6;
