@@ -184,3 +184,31 @@ async def recheck_device(
     )
     results = await run_inspection(db, targets)
     return {"checked": results}
+
+
+@router.get("/{device_id}/snmp/interfaces")
+def get_device_snmp_interfaces(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: object = Depends(get_current_user),
+):
+    device = _get_or_404(db, device_id)
+    if device.type != "switch":
+        raise HTTPException(status_code=400, detail="Device is not a switch")
+    if not device.ip_address:
+        raise HTTPException(status_code=400, detail="Switch IP address not configured")
+
+    from app.services.snmp import get_switch_interfaces
+    interfaces = get_switch_interfaces(
+        device_id=device.id,
+        ip=device.ip_address,
+        community=device.snmp_community or "public",
+        port=device.snmp_port or 161,
+        version=device.snmp_version or "v2c",
+    )
+    return {
+        "device_id": device.id,
+        "interfaces": interfaces,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+

@@ -37,6 +37,9 @@ def device_to_dict(d: Device) -> dict:
         "port_count": d.port_count,
         "uplink_port": d.uplink_port,
         "port_bindings": d.port_bindings,
+        "snmp_community": d.snmp_community,
+        "snmp_version": d.snmp_version,
+        "snmp_port": d.snmp_port,
         "status": d.status,
         "latency_ms": d.latency_ms,
         "last_check": d.last_check.replace(tzinfo=timezone.utc).isoformat()

@@ -57,6 +57,9 @@ def test_migrate_adds_device_columns_to_legacy_db():
     cols = {c["name"] for c in inspect(engine).get_columns("devices")}
     assert "location" in cols
     assert "image_url" in cols
+    assert "snmp_community" in cols
+    assert "snmp_version" in cols
+    assert "snmp_port" in cols
 
     with Session(engine) as db:
         rows = db.scalars(select(Device)).all()

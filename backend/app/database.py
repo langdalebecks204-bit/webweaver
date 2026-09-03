@@ -37,6 +37,9 @@ _DEVICE_ADDED_COLUMNS = {
     "port_count": "INTEGER",
     "uplink_port": "INTEGER",
     "port_bindings": "TEXT",
+    "snmp_community": "VARCHAR(50)",
+    "snmp_version": "VARCHAR(10)",
+    "snmp_port": "INTEGER",
 }
 
 
