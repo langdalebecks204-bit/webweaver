@@ -41,3 +41,8 @@ export function uploadDeviceImage(id, file) {
 export function deleteDeviceImage(id) {
   return client.delete(`/devices/${id}/image`)
 }
+
+export function getDeviceSnmpInterfaces(id) {
+  return client.get(`/devices/${id}/snmp/interfaces`)
+}
+

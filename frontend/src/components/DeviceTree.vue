@@ -7,20 +7,20 @@ import { allTypeOptions, typeIcon } from '../utils/deviceTypes'
 import PortBindingDialog from './PortBindingDialog.vue'
 
 const props = defineProps({ node: { type: Object, required: true } })
-const emit = defineEmits(['open-history', 'open-detail'])
+const emit = defineEmits(['open-history', 'open-detail', 'open-snmp'])
 const store = useDevicesStore()
 const settingsStore = useSettingsStore()
 const dialogVisible = ref(false)
 const portDialogVisible = ref(false)
 const editing = ref(null)
-const form = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, parent_id: null })
+const form = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, snmp_community: 'public', snmp_version: 'v2c', snmp_port: 161, parent_id: null })
 const portChildDevices = computed(() =>
   editing.value ? (props.node.children || []).map((c) => ({ id: c.id, name: c.name })) : []
 )
 
 function openCreate(parentId) {
   editing.value = null
-  form.value = { name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, parent_id: parentId }
+  form.value = { name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, snmp_community: 'public', snmp_version: 'v2c', snmp_port: 161, parent_id: parentId }
   dialogVisible.value = true
 }
 
@@ -35,6 +35,9 @@ function openEdit() {
     port_count: props.node.port_count ?? null,
     uplink_port: props.node.uplink_port ?? null,
     port_bindings: props.node.port_bindings ?? {},
+    snmp_community: props.node.snmp_community || 'public',
+    snmp_version: props.node.snmp_version || 'v2c',
+    snmp_port: props.node.snmp_port || 161,
     parent_id: props.node.parent_id,
   }
   dialogVisible.value = true
@@ -63,6 +66,9 @@ async function submit() {
     port_count: form.value.port_count,
     uplink_port: form.value.uplink_port,
     port_bindings: Object.keys(form.value.port_bindings).length ? form.value.port_bindings : null,
+    snmp_community: form.value.snmp_community || 'public',
+    snmp_version: form.value.snmp_version || 'v2c',
+    snmp_port: form.value.snmp_port || 161,
   }
   try {
     if (editing.value) {
@@ -98,6 +104,7 @@ function onCommand(command) {
   else if (command === 'recheck') store.recheck(props.node.id)
   else if (command === 'delete') remove()
   else if (command === 'detail') emit('open-detail', props.node)
+  else if (command === 'snmp') emit('open-snmp', props.node)
   else if (command === 'history') {
     if (props.node.ip_address) emit('open-history', props.node)
   }
@@ -158,6 +165,7 @@ onMounted(() => {
         <el-dropdown-item command="add-sibling">添加同级</el-dropdown-item>
         <el-dropdown-item command="edit">编辑</el-dropdown-item>
         <el-dropdown-item command="detail">设备详情</el-dropdown-item>
+        <el-dropdown-item v-if="props.node.type === 'switch'" command="snmp">端口与实时带宽(SNMP)</el-dropdown-item>
         <el-dropdown-item v-if="props.node.ip_address" command="history">查看历史</el-dropdown-item>
         <el-dropdown-item command="recheck">立即巡检</el-dropdown-item>
         <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
@@ -205,6 +213,18 @@ onMounted(() => {
       </el-form-item>
       <el-form-item v-if="form.type === 'switch' || form.type === 'unmanaged_switch'" label="上联端口">
         <el-input-number v-model="form.uplink_port" :min="1" :max="48" />
+      </el-form-item>
+      <el-form-item v-if="form.type === 'switch'" label="SNMP 团体字">
+        <el-input v-model="form.snmp_community" placeholder="默认 public" />
+      </el-form-item>
+      <el-form-item v-if="form.type === 'switch'" label="SNMP 端口">
+        <el-input-number v-model="form.snmp_port" :min="1" :max="65535" placeholder="默认 161" />
+      </el-form-item>
+      <el-form-item v-if="form.type === 'switch'" label="SNMP 版本">
+        <el-select v-model="form.snmp_version" style="width: 100%">
+          <el-option label="v2c" value="v2c" />
+          <el-option label="v1" value="v1" />
+        </el-select>
       </el-form-item>
       <el-form-item v-if="form.type === 'switch' || form.type === 'unmanaged_switch'" label="端口绑定">
         <el-button size="small" @click="openPortDialog">配置端口绑定</el-button>

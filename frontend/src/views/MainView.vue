@@ -14,6 +14,7 @@ import BackupPanel from '../components/BackupPanel.vue'
 import DeviceHistory from '../components/DeviceHistory.vue'
 import TopologyView from '../components/TopologyView.vue'
 import PortBindingDialog from '../components/PortBindingDialog.vue'
+import SwitchPortsModal from '../components/SwitchPortsModal.vue'
 import { allTypeOptions, typeLabel } from '../utils/deviceTypes'
 
 const router = useRouter()
@@ -26,12 +27,14 @@ const activeTab = ref('devices')
 const viewMode = ref('tree')
 const historyDevice = ref(null)
 const detailDevice = ref(null)
+const snmpDevice = ref(null)
+const snmpModalVisible = ref(false)
 const targetDialogVisible = ref(false)
 const targetEditing = ref(null)
 const targetForm = ref({ name: '', ip_address: '', domain: '', port: null })
 const deviceDialogVisible = ref(false)
 const deviceEditing = ref(null)
-const deviceForm = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {} })
+const deviceForm = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, snmp_community: 'public', snmp_version: 'v2c', snmp_port: 161 })
 const deviceCandidates = ref([])
 const portDialogVisible = ref(false)
 const portChildDevices = ref([])
@@ -230,6 +233,9 @@ function openDeviceEdit(device) {
     port_count: device.port_count ?? null,
     uplink_port: device.uplink_port ?? null,
     port_bindings: device.port_bindings ?? {},
+    snmp_community: device.snmp_community || 'public',
+    snmp_version: device.snmp_version || 'v2c',
+    snmp_port: device.snmp_port || 161,
   }
   deviceDialogVisible.value = true
 }
@@ -366,6 +372,7 @@ async function onSaveDevice() {
                     :node="data"
                     @open-history="historyDevice = $event"
                     @open-detail="detailDevice = $event"
+                    @open-snmp="snmpDevice = $event; snmpModalVisible = true"
                   />
                 </template>
               </el-tree>
@@ -439,6 +446,11 @@ async function onSaveDevice() {
         @updated="store.load()"
       />
 
+      <SwitchPortsModal
+        v-model="snmpModalVisible"
+        :device="snmpDevice"
+      />
+
       <el-dialog v-model="targetDialogVisible" :title="targetEditing ? '编辑外网目标' : '新增外网目标'">
         <el-form label-width="80px">
           <el-form-item label="名称">
@@ -489,6 +501,18 @@ async function onSaveDevice() {
           </el-form-item>
           <el-form-item v-if="deviceForm.type === 'switch' || deviceForm.type === 'unmanaged_switch'" label="上联端口">
             <el-input-number v-model="deviceForm.uplink_port" :min="1" :max="48" />
+          </el-form-item>
+          <el-form-item v-if="deviceForm.type === 'switch'" label="SNMP 团体字">
+            <el-input v-model="deviceForm.snmp_community" placeholder="默认 public" />
+          </el-form-item>
+          <el-form-item v-if="deviceForm.type === 'switch'" label="SNMP 端口">
+            <el-input-number v-model="deviceForm.snmp_port" :min="1" :max="65535" placeholder="默认 161" />
+          </el-form-item>
+          <el-form-item v-if="deviceForm.type === 'switch'" label="SNMP 版本">
+            <el-select v-model="deviceForm.snmp_version" style="width: 100%">
+              <el-option label="v2c" value="v2c" />
+              <el-option label="v1" value="v1" />
+            </el-select>
           </el-form-item>
           <el-form-item v-if="deviceForm.type === 'switch' || deviceForm.type === 'unmanaged_switch'" label="端口绑定">
             <el-button size="small" @click="openPortDialog">配置端口绑定</el-button>
