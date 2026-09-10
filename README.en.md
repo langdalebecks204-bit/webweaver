@@ -41,14 +41,15 @@ A single multi-arch image (linux/amd64 + linux/arm64) is published to GitHub Con
 
 ```bash
 docker run -d --name weaver \
-  -p 8000:8000 \
+  --net=host \
   --cap-add=NET_RAW \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=change-me-to-a-long-random-string \
-  ghcr.io/langdalebecks204-bit/webweaver:latest
+  ghcr.io/langdalebecks204-bit/webweaver:0.5.0
 ```
 
-- `--cap-add=NET_RAW`: required for ICMP ping (without it only TCP probing works).
+- `--net=host`: recommended network mode to allow direct ICMP and SNMP (UDP 161) communication with LAN devices/switches without Docker bridge subnet conflict.
+- `--cap-add=NET_RAW`: required for ICMP ping.
 - `-v webweaver-data:/data`: persists the SQLite database; data survives container recreation.
 - On first start a default admin `admin` / `admin123` is created (make sure to change it via `WEAVER_DEFAULT_ADMIN_PASSWORD` in production).
 - Frontend static assets are bundled into the image; just open http://\<host\>:8000 in a browser.
@@ -59,14 +60,14 @@ You can also use `docker compose up -d` (see `docker-compose.yml` in the repo; e
 
 ```bash
 # Pinned tag (recommended)
-docker pull ghcr.io/langdalebecks204-bit/webweaver:0.4.13
+docker pull ghcr.io/langdalebecks204-bit/webweaver:0.5.0
 docker rm -f weaver
 docker run -d --name weaver \
-  -p 8000:8000 \
+  --net=host \
   --cap-add=NET_RAW \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=change-me-to-a-long-random-string \
-  ghcr.io/langdalebecks204-bit/webweaver:0.4.13
+  ghcr.io/langdalebecks204-bit/webweaver:0.5.0
 
 # Or with compose
 docker compose pull

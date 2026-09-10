@@ -41,14 +41,15 @@ npm run dev
 
 ```bash
 docker run -d --name weaver \
-  -p 8000:8000 \
+  --net=host \
   --cap-add=NET_RAW \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=请改成随机长字符串 \
-  ghcr.io/langdalebecks204-bit/webweaver:latest
+  ghcr.io/langdalebecks204-bit/webweaver:0.5.0
 ```
 
-- `--cap-add=NET_RAW`：ICMP Ping 必需（否则只能 TCP 探测）。
+- `--net=host`：推荐网络模式，方便直接与局域网设备/交换机进行 ICMP 与 SNMP 161 端口通信（避开 Docker 虚拟网段冲突）。
+- `--cap-add=NET_RAW`：ICMP Ping 必需（若使用 `--net=host` 亦推荐保留）。
 - `-v webweaver-data:/data`：SQLite 数据库持久化，重建容器不丢数据。
 - 首次启动自动创建默认管理员 `admin` / `admin123`（生产务必通过 `WEAVER_DEFAULT_ADMIN_PASSWORD` 修改）。
 - 前端静态资源已内置镜像中，浏览器访问 http://<主机>:8000 即可。
@@ -59,14 +60,14 @@ docker run -d --name weaver \
 
 ```bash
 # 固定 tag 方式（推荐）
-docker pull ghcr.io/langdalebecks204-bit/webweaver:0.4.13
+docker pull ghcr.io/langdalebecks204-bit/webweaver:0.5.0
 docker rm -f weaver
 docker run -d --name weaver \
-  -p 8000:8000 \
+  --net=host \
   --cap-add=NET_RAW \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=请改成随机长字符串 \
-  ghcr.io/langdalebecks204-bit/webweaver:0.4.13
+  ghcr.io/langdalebecks204-bit/webweaver:0.5.0
 
 # 或 compose 方式
 docker compose pull
