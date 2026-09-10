@@ -143,7 +143,7 @@ async function fetchData(silent = false) {
   if (!silent) loading.value = true
   try {
     const res = await getDeviceSnmpInterfaces(props.device.id)
-    interfaces.value = res.interfaces || []
+    interfaces.value = res.data?.interfaces || res.interfaces || []
     lastUpdated.value = new Date().toLocaleTimeString()
 
     // Update history for charts
