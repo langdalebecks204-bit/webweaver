@@ -94,7 +94,7 @@ def decode_asn1(data: bytes, offset: int = 0) -> Tuple[int, Any, int]:
     val_data = data[next_off : next_off + length]
     end_off = next_off + length
 
-    if tag == 0x30:  # SEQUENCE
+    if tag in (0x30, 0xA0, 0xA1, 0xA2, 0xA3):  # SEQUENCE / PDU constructed types
         sub_off = next_off
         elements = []
         while sub_off < end_off:
