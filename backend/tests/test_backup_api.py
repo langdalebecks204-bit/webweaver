@@ -349,3 +349,63 @@ def test_import_old_backup_without_ports(client, admin_headers):
     got = client.get("/api/devices", headers=admin_headers).json()
     assert got[0]["name"] == "old"
     assert got[0]["port_count"] is None
+
+
+def test_export_and_import_probe_records(client, admin_headers):
+    from datetime import datetime, timezone
+    from app.models import ProbeRecord
+
+    # 1. Create a device and insert a probe record
+    created = client.post("/api/devices", headers=admin_headers,
+                          json={"name": "monitored_dev", "type": "switch", "ip_address": "192.168.1.1",
+                                "snmp_community": "test_comm", "snmp_version": "v2c", "snmp_port": 1161}).json()
+    dev_id = created["id"]
+    with SessionLocal() as db:
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        db.add(ProbeRecord(device_id=dev_id, checked_at=now, status="online", latency_ms=15))
+        db.commit()
+
+    # 2. Export default (includes history)
+    data = _export_json(client, admin_headers)
+    assert "records" in data
+    assert len(data["records"]) == 1
+    assert data["records"][0]["status"] == "online"
+    assert data["records"][0]["latency_ms"] == 15
+    exported_dev = next(d for d in data["devices"] if d["name"] == "monitored_dev")
+    assert exported_dev["snmp_community"] == "test_comm"
+    assert exported_dev["snmp_port"] == 1161
+
+    # 3. Export without history
+    from app.services.backup_service import _parse_import_bytes
+    r_no_hist = client.get("/api/backup/export", headers=admin_headers, params={"include_history": "0"})
+    data_no_hist, _ = _parse_import_bytes(r_no_hist.content)
+    assert "records" not in data_no_hist
+
+    # 4. Import in replace mode
+    r_imp = client.post("/api/backup/import?mode=replace", headers=admin_headers,
+                        content=json.dumps(data).encode())
+    assert r_imp.status_code == 200
+
+    # Verify device and its probe records exist with mapped ID
+    new_devs = client.get("/api/devices", headers=admin_headers).json()
+    new_dev = next(d for d in new_devs if d["name"] == "monitored_dev")
+    assert new_dev["snmp_community"] == "test_comm"
+    with SessionLocal() as db:
+        recs = db.query(ProbeRecord).filter(ProbeRecord.device_id == new_dev["id"]).all()
+        assert len(recs) == 1
+        assert recs[0].status == "online"
+        assert recs[0].latency_ms == 15
+
+    # 5. Import in merge mode (should not duplicate existing record, should add new)
+    data["records"].append({
+        "device_id": data["devices"][0]["id"],
+        "checked_at": datetime(2026, 9, 16, 12, 0, 0).isoformat(),
+        "status": "offline",
+        "latency_ms": None,
+    })
+    r_merge = client.post("/api/backup/import?mode=merge", headers=admin_headers,
+                          content=json.dumps(data).encode())
+    assert r_merge.status_code == 200
+    with SessionLocal() as db:
+        recs_after = db.query(ProbeRecord).filter(ProbeRecord.device_id == new_dev["id"]).all()
+        assert len(recs_after) == 2

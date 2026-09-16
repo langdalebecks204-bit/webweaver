@@ -19,17 +19,26 @@ def export_backup_endpoint(
     include_external: bool | None = None,
     include_settings: bool | None = None,
     include_images: bool | None = None,
+    include_history: bool | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    if include_devices is None and include_external is None and include_settings is None:
-        include_devices = include_external = include_settings = True
+    if include_devices is None and include_external is None and include_settings is None and include_history is None:
+        include_devices = include_external = include_settings = include_history = True
     else:
         include_devices = bool(include_devices)
         include_external = bool(include_external)
         include_settings = bool(include_settings)
+        include_history = bool(include_history)
     include_images = True if include_images is None else bool(include_images)
-    content = export_backup(db, include_devices, include_external, include_settings, include_images)
+    content = export_backup(
+        db,
+        include_devices=include_devices,
+        include_external=include_external,
+        include_settings=include_settings,
+        include_images=include_images,
+        include_history=include_history,
+    )
     return Response(
         content=content,
         media_type="application/zip",

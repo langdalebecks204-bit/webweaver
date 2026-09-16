@@ -17,6 +17,7 @@ const settings = useSettingsStore()
 const includeDevices = ref(true)
 const includeExternal = ref(true)
 const includeSettings = ref(true)
+const includeHistory = ref(true)
 const importMode = ref('replace')
 
 async function onExport() {
@@ -25,6 +26,7 @@ async function onExport() {
       include_devices: includeDevices.value,
       include_external: includeExternal.value,
       include_settings: includeSettings.value,
+      include_history: includeHistory.value,
     })
     const blob = new Blob([response.data], { type: 'application/zip' })
     const url = URL.createObjectURL(blob)
@@ -86,6 +88,7 @@ async function onReset() {
         <label><input type="checkbox" v-model="includeDevices" /> 设备（含图片）</label>
         <label><input type="checkbox" v-model="includeExternal" /> 外网目标</label>
         <label><input type="checkbox" v-model="includeSettings" /> 巡检间隔</label>
+        <label><input type="checkbox" v-model="includeHistory" /> 巡检Ping历史记录</label>
       </div>
       <el-button type="primary" @click="onExport">导出备份</el-button>
     </el-card>

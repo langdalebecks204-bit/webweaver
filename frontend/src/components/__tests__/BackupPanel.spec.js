@@ -84,7 +84,7 @@ describe('BackupPanel 备份与恢复', () => {
     vi.clearAllMocks()
   })
 
-  it('导出默认勾选全部三类并下载 zip', async () => {
+  it('导出默认勾选全部并下载 zip', async () => {
     exportMock.mockResolvedValue({ data: new Blob(['zip'], { type: 'application/zip' }) })
     const wrapper = mountPanel()
     await flushPromises()
@@ -94,6 +94,7 @@ describe('BackupPanel 备份与恢复', () => {
       include_devices: true,
       include_external: true,
       include_settings: true,
+      include_history: true,
     })
   })
 
@@ -108,6 +109,22 @@ describe('BackupPanel 备份与恢复', () => {
       include_devices: true,
       include_external: false,
       include_settings: true,
+      include_history: true,
+    })
+  })
+
+  it('取消勾选历史后导出参数排除历史', async () => {
+    exportMock.mockResolvedValue({ data: new Blob(['zip']) })
+    const wrapper = mountPanel()
+    await flushPromises()
+    await wrapper.findAll('input[type="checkbox"]')[3].setValue(false)
+    await buttonByText(wrapper, '导出备份').trigger('click')
+    await flushPromises()
+    expect(exportMock).toHaveBeenCalledWith({
+      include_devices: true,
+      include_external: true,
+      include_settings: true,
+      include_history: false,
     })
   })
 
