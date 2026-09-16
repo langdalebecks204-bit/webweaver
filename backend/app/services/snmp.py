@@ -3,6 +3,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 # Raw SNMP OID Constants for IF-MIB
+OID_IF_INDEX = "1.3.6.1.2.1.2.2.1.1"
 OID_IF_DESCR = "1.3.6.1.2.1.2.2.1.2"
 OID_IF_TYPE = "1.3.6.1.2.1.2.2.1.3"
 OID_IF_SPEED = "1.3.6.1.2.1.2.2.1.5"
@@ -209,6 +210,11 @@ def get_switch_interfaces(
     """Walk IF-MIB and return status and real-time bandwidth for all interfaces."""
     # 1. Walk descriptions and status
     descrs = snmp_walk(ip, community, OID_IF_DESCR, port, version, timeout)
+    names = {}
+    if not descrs:
+        # Fallback to ifName if ifDescr is not implemented (common on whitebox/FreeRTOS/OEM switches)
+        names = snmp_walk(ip, community, OID_IF_NAME, port, version, timeout)
+
     statuses = snmp_walk(ip, community, OID_IF_OPER_STATUS, port, version, timeout)
     speeds = snmp_walk(ip, community, OID_IF_SPEED, port, version, timeout)
     high_speeds = snmp_walk(ip, community, OID_IF_HIGH_SPEED, port, version, timeout)
@@ -226,20 +232,39 @@ def get_switch_interfaces(
     now = time.time()
     interfaces = []
 
-    # Map by index suffix
+    # Map by index suffix across all queried MIB tables to support devices missing ifDescr
     indexes = set()
-    for oid in descrs.keys():
-        idx = int(oid.split(".")[-1])
-        indexes.add(idx)
+    for src_dict in (descrs, names, statuses, speeds, high_speeds, in_octets, out_octets):
+        for oid in src_dict.keys():
+            try:
+                idx = int(oid.split(".")[-1])
+                indexes.add(idx)
+            except (ValueError, IndexError):
+                pass
+
+    # If still no indexes found, try walking ifIndex explicitly
+    if not indexes:
+        if_indexes = snmp_walk(ip, community, OID_IF_INDEX, port, version, timeout)
+        for oid in if_indexes.keys():
+            try:
+                idx = int(oid.split(".")[-1])
+                indexes.add(idx)
+            except (ValueError, IndexError):
+                pass
 
     for idx in sorted(indexes):
-        descr_val = descrs.get(f"{OID_IF_DESCR}.{idx}", b"")
+        descr_val = descrs.get(f"{OID_IF_DESCR}.{idx}")
+        if not descr_val and names:
+            descr_val = names.get(f"{OID_IF_NAME}.{idx}")
+
         if isinstance(descr_val, bytes):
             name = descr_val.decode("utf-8", errors="ignore").strip()
+        elif descr_val is not None:
+            name = str(descr_val).strip()
         else:
-            name = str(descr_val)
+            name = ""
 
-        if not name:
+        if not name or name in ("b''", "None"):
             name = f"Port{idx}"
 
         stat_val = statuses.get(f"{OID_IF_OPER_STATUS}.{idx}", 2)
