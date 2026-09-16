@@ -409,3 +409,51 @@ def test_export_and_import_probe_records(client, admin_headers):
     with SessionLocal() as db:
         recs_after = db.query(ProbeRecord).filter(ProbeRecord.device_id == new_dev["id"]).all()
         assert len(recs_after) == 2
+
+
+def test_export_and_import_zip_streaming_history(client, admin_headers):
+    from datetime import datetime, timedelta, timezone
+    from app.models import ProbeRecord
+
+    # Create device
+    dev = client.post("/api/devices", headers=admin_headers,
+                      json={"name": "stream_sw", "type": "switch", "ip_address": "10.1.1.1"}).json()
+    dev_id = dev["id"]
+
+    # Insert 2000 probe records
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    with SessionLocal() as db:
+        batch = [
+            {
+                "device_id": dev_id,
+                "checked_at": now - timedelta(minutes=i),
+                "status": "online" if i % 2 == 0 else "offline",
+                "latency_ms": i % 50,
+            }
+            for i in range(2000)
+        ]
+        db.bulk_insert_mappings(ProbeRecord, batch)
+        db.commit()
+
+    # Export zip
+    r_exp = client.get("/api/backup/export", headers=admin_headers)
+    assert r_exp.status_code == 200
+    zip_bytes = r_exp.content
+
+    # Inspect zip contents
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        assert "weaver.json" in zf.namelist()
+        assert "history.jsonl" in zf.namelist()
+        lines = zf.read("history.jsonl").decode("utf-8").strip().splitlines()
+        assert len(lines) == 2000
+
+    # Import zip back in replace mode
+    r_imp = client.post("/api/backup/import?mode=replace", headers=admin_headers, content=zip_bytes)
+    assert r_imp.status_code == 200
+
+    # Verify device and all 2000 records were imported
+    new_devs = client.get("/api/devices", headers=admin_headers).json()
+    new_dev = next(d for d in new_devs if d["name"] == "stream_sw")
+    with SessionLocal() as db:
+        count = db.query(ProbeRecord).filter(ProbeRecord.device_id == new_dev["id"]).count()
+        assert count == 2000

@@ -143,15 +143,23 @@ def _process_image_safe(data: bytes, orientation: int | None) -> bytes:
 
 
 def _run_worker(mode: str, data: bytes) -> bytes | None:
+    backend_dir = str(Path(__file__).resolve().parents[2])
     env = os.environ.copy()
     env["PYTHONFAULTHANDLER"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        f"{backend_dir}{os.pathsep}{existing_pythonpath}"
+        if existing_pythonpath
+        else backend_dir
+    )
     try:
         proc = subprocess.run(
             [sys.executable, "-m", "app.services.image_worker", mode],
             input=data,
             capture_output=True,
             timeout=IMAGE_PROCESS_TIMEOUT,
+            cwd=backend_dir,
             env=env,
         )
     except subprocess.TimeoutExpired:

@@ -37,7 +37,17 @@ async function onExport() {
     a.click()
     URL.revokeObjectURL(url)
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '导出失败')
+    let msg = '导出失败'
+    if (error.response?.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text()
+        const parsed = JSON.parse(text)
+        if (parsed.detail) msg = parsed.detail
+      } catch (_) {}
+    } else if (error.response?.data?.detail) {
+      msg = error.response.data.detail
+    }
+    ElMessage.error(msg)
   }
 }
 

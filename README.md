@@ -45,7 +45,7 @@ docker run -d --name weaver \
   --cap-add=NET_RAW \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=请改成随机长字符串 \
-  ghcr.io/langdalebecks204-bit/webweaver:0.5.3
+  ghcr.io/langdalebecks204-bit/webweaver:0.5.4
 ```
 
 - `--net=host`：推荐网络模式，方便直接与局域网设备/交换机进行 ICMP 与 SNMP 161 端口通信（避开 Docker 虚拟网段冲突）。
@@ -60,14 +60,14 @@ docker run -d --name weaver \
 
 ```bash
 # 固定 tag 方式（推荐）
-docker pull ghcr.io/langdalebecks204-bit/webweaver:0.5.3
+docker pull ghcr.io/langdalebecks204-bit/webweaver:0.5.4
 docker rm -f weaver
 docker run -d --name weaver \
   --net=host \
   --cap-add=NET_RAW \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=请改成随机长字符串 \
-  ghcr.io/langdalebecks204-bit/webweaver:0.5.3
+  ghcr.io/langdalebecks204-bit/webweaver:0.5.4
 
 # 或 compose 方式
 docker compose pull
