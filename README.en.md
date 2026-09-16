@@ -45,7 +45,7 @@ docker run -d --name weaver \
   --cap-add=NET_RAW \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=change-me-to-a-long-random-string \
-  ghcr.io/langdalebecks204-bit/webweaver:0.5.1
+  ghcr.io/langdalebecks204-bit/webweaver:0.5.2
 ```
 
 - `--net=host`: recommended network mode to allow direct ICMP and SNMP (UDP 161) communication with LAN devices/switches without Docker bridge subnet conflict.
@@ -60,14 +60,14 @@ You can also use `docker compose up -d` (see `docker-compose.yml` in the repo; e
 
 ```bash
 # Pinned tag (recommended)
-docker pull ghcr.io/langdalebecks204-bit/webweaver:0.5.1
+docker pull ghcr.io/langdalebecks204-bit/webweaver:0.5.2
 docker rm -f weaver
 docker run -d --name weaver \
   --net=host \
   --cap-add=NET_RAW \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=change-me-to-a-long-random-string \
-  ghcr.io/langdalebecks204-bit/webweaver:0.5.1
+  ghcr.io/langdalebecks204-bit/webweaver:0.5.2
 
 # Or with compose
 docker compose pull

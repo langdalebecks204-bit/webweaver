@@ -154,7 +154,7 @@ def build_snmp_getnext_packet(community: str, oid_str: str, request_id: int = 10
     return message
 
 
-def snmp_walk(ip: str, community: str, root_oid: str, port: int = 161, version: str = "v2c", timeout: float = 1.5) -> Dict[str, Any]:
+def snmp_walk(ip: str, community: str, root_oid: str, port: int = 161, version: str = "v2c", timeout: float = 1.0) -> Dict[str, Any]:
     results = {}
     curr_oid = root_oid
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -187,9 +187,13 @@ def snmp_walk(ip: str, community: str, root_oid: str, port: int = 161, version: 
             if not isinstance(returned_oid, str) or not returned_oid.startswith(root_oid + "."):
                 break
 
+            # Prevent infinite loops from buggy switch firmware returning identical or duplicate OIDs
+            if returned_oid == curr_oid or returned_oid in results:
+                break
+
             results[returned_oid] = val
             curr_oid = returned_oid
-            if len(results) > 200:  # safety bound
+            if len(results) > 100 or req_id > 120:  # safety bound
                 break
     except Exception:
         pass
@@ -205,7 +209,7 @@ def get_switch_interfaces(
     community: str = "public",
     port: int = 161,
     version: str = "v2c",
-    timeout: float = 1.5
+    timeout: float = 1.0
 ) -> List[Dict[str, Any]]:
     """Walk IF-MIB and return status and real-time bandwidth for all interfaces."""
     # 1. Walk descriptions and status
