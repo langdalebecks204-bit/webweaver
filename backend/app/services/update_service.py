@@ -193,6 +193,12 @@ def apply_update_package(
         if extracted_version and Path("/app").is_dir():
             shutil.copy2(extracted_version, Path("/app/version.json"))
 
+        # 覆盖 requirements.txt
+        extracted_reqs = next(extract_temp.glob("**/backend/requirements.txt"), None)
+        target_reqs = Path("/app/backend/requirements.txt")
+        if extracted_reqs and target_reqs.parent.is_dir():
+            shutil.copy2(extracted_reqs, target_reqs)
+
         # 3. 执行数据库迁移平滑升级
         init_db()
 
