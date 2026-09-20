@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 VERSION_FILE_PATH = Path("/app/version.json")
-FALLBACK_VERSION = "0.5.4"
+FALLBACK_VERSION = "0.5.5"
 
 
 def _check_dockerenv() -> bool:

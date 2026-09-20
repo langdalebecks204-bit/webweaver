@@ -100,7 +100,7 @@ async function onApply() {
         <div class="info-item">
           <span class="label">当前运行版本：</span>
           <el-tag size="large" type="primary" effect="dark">
-            v{{ store.currentVersion || '0.5.4' }}
+            v{{ store.currentVersion || '0.5.5' }}
           </el-tag>
         </div>
 
