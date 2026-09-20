@@ -11,6 +11,7 @@ import DeviceTable from '../components/DeviceTable.vue'
 import DeviceDetail from '../components/DeviceDetail.vue'
 import UsersPanel from '../components/UsersPanel.vue'
 import BackupPanel from '../components/BackupPanel.vue'
+import UpdatePanel from '../components/UpdatePanel.vue'
 import DeviceHistory from '../components/DeviceHistory.vue'
 import TopologyView from '../components/TopologyView.vue'
 import PortBindingDialog from '../components/PortBindingDialog.vue'
@@ -430,6 +431,9 @@ async function onSaveDevice() {
         </el-tab-pane>
         <el-tab-pane v-if="isAdmin" label="备份与恢复" name="backup">
           <BackupPanel />
+        </el-tab-pane>
+        <el-tab-pane v-if="isAdmin" label="系统更新" name="update">
+          <UpdatePanel />
         </el-tab-pane>
       </el-tabs>
 

@@ -215,6 +215,7 @@ function mountView() {
         },
         UsersPanel: { template: '<div class="users-panel-stub" />' },
         BackupPanel: { template: '<div class="backup-panel-stub" />' },
+        UpdatePanel: { template: '<div class="update-panel-stub" />' },
         'el-radio-group': {
           props: ['modelValue'],
           emits: ['update:modelValue'],
@@ -426,12 +427,13 @@ describe('MainView 管理页签', () => {  beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('admin 显示用户管理与备份与恢复页签', async () => {
+  it('admin 显示用户管理与备份与恢复与系统更新页签', async () => {
     authState.role = 'admin'
     const wrapper = mountView()
     await flushPromises()
     expect(wrapper.find('[data-label="用户管理"]').exists()).toBe(true)
     expect(wrapper.find('[data-label="备份与恢复"]').exists()).toBe(true)
+    expect(wrapper.find('[data-label="系统更新"]').exists()).toBe(true)
   })
 
   it('viewer 不显示管理页签', async () => {
@@ -440,6 +442,7 @@ describe('MainView 管理页签', () => {  beforeEach(() => {
     await flushPromises()
     expect(wrapper.find('[data-label="用户管理"]').exists()).toBe(false)
     expect(wrapper.find('[data-label="备份与恢复"]').exists()).toBe(false)
+    expect(wrapper.find('[data-label="系统更新"]').exists()).toBe(false)
   })
 })
 
