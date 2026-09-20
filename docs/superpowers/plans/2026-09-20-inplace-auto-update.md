@@ -33,7 +33,7 @@
 - Consumes: 触发条件 `tags: - "[0-9]*"` 或 `tags: - "v[0-9]*"`。
 - Produces: 产出物 `webweaver-update.tar.gz` 并作为 Release Asset 发布到 GitHub Release。
 
-- [ ] **Step 1: 在 publish.yml 中添加 Tag 匹配规则与 Release 打包步骤**
+- [x] **Step 1: 在 publish.yml 中添加 Tag 匹配规则与 Release 打包步骤**
 
 修改 `.github/workflows/publish.yml`：
 1. 监听 tags 增加 `v[0-9]*`。
@@ -68,11 +68,11 @@
           generate_release_notes: true
 ```
 
-- [ ] **Step 2: 验证 publish.yml 语法有效性**
+- [x] **Step 2: 验证 publish.yml 语法有效性**
 
 检查 YAML 格式正确无缩进错误。
 
-- [ ] **Step 3: 提交 publish.yml**
+- [x] **Step 3: 提交 publish.yml**
 
 ```bash
 git add .github/workflows/publish.yml
@@ -93,7 +93,7 @@ git commit -m "ci: add webweaver-update.tar.gz packaging and release step"
   - `is_container_env() -> bool`：检测是否在 Docker / 容器环境中（检测 `/.dockerenv` 或 `/app/backend/app`）。
   - `is_update_allowed() -> bool`：判断当前环境是否允许热更新（容器环境或 `WEAVER_ALLOW_INPLACE_UPDATE=true`）。
 
-- [ ] **Step 1: 编写失败测试 `backend/tests/test_version_service.py`**
+- [x] **Step 1: 编写失败测试 `backend/tests/test_version_service.py`**
 
 ```python
 import json
@@ -123,12 +123,12 @@ def test_is_update_allowed(monkeypatch):
     assert is_update_allowed() is False
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 运行：`.venv\Scripts\python.exe -m pytest tests/test_version_service.py`
 预期：FAIL（模块尚未创建）
 
-- [ ] **Step 3: 实现 `backend/app/services/version_service.py`**
+- [x] **Step 3: 实现 `backend/app/services/version_service.py`**
 
 ```python
 import json
@@ -168,12 +168,12 @@ def get_current_version() -> str:
         return FALLBACK_VERSION
 ```
 
-- [ ] **Step 4: 运行测试验证通过**
+- [x] **Step 4: 运行测试验证通过**
 
 运行：`.venv\Scripts\python.exe -m pytest tests/test_version_service.py`
 预期：PASS
 
-- [ ] **Step 5: 提交代码**
+- [x] **Step 5: 提交代码**
 
 ```bash
 git add backend/app/services/version_service.py backend/tests/test_version_service.py
@@ -194,7 +194,7 @@ git commit -m "feat: add version detection and container environment check servi
   - `verify_update_archive(archive_path: Path) -> bool`: 检查压缩包是否包含必要文件。
   - `apply_update_package(download_url: str, mirror: str = "", target_backend_dir: Path = None, target_frontend_dir: Path = None, skip_restart: bool = False) -> dict`: 执行全流程升级。
 
-- [ ] **Step 1: 编写单元测试 `backend/tests/test_update_service.py`**
+- [x] **Step 1: 编写单元测试 `backend/tests/test_update_service.py`**
 
 测试涵盖：
 1. `check_github_update` 正常响应解析与代理 URL 转换。
@@ -270,12 +270,12 @@ def test_apply_update_rollback_on_failure(tmp_path, monkeypatch):
     assert (frontend_dir / "index.html").read_text(encoding="utf-8") == "original-html"
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 运行：`.venv\Scripts\python.exe -m pytest tests/test_update_service.py`
 预期：FAIL
 
-- [ ] **Step 3: 实现 `backend/app/services/update_service.py`**
+- [x] **Step 3: 实现 `backend/app/services/update_service.py`**
 
 包含 GitHub Releases 请求、镜像拼接、tar 完整性检查、安全备份、原子目录替换、数据库初始化与异步安全退出。
 
@@ -486,12 +486,12 @@ def apply_update_package(
     return {"status": "success", "message": "系统更新已应用成功，服务正在自动重启..."}
 ```
 
-- [ ] **Step 4: 运行测试验证通过**
+- [x] **Step 4: 运行测试验证通过**
 
 运行：`.venv\Scripts\python.exe -m pytest tests/test_update_service.py`
 预期：PASS
 
-- [ ] **Step 5: 提交代码**
+- [x] **Step 5: 提交代码**
 
 ```bash
 git add backend/app/services/update_service.py backend/tests/test_update_service.py
@@ -513,7 +513,7 @@ git commit -m "feat: add update service with verification, backup, rollback and 
   - `GET /api/system/update/check`
   - `POST /api/system/update/apply`
 
-- [ ] **Step 1: 编写路由测试 `backend/tests/test_system_api.py`**
+- [x] **Step 1: 编写路由测试 `backend/tests/test_system_api.py`**
 
 测试非管理员 403、管理员 200、检查更新与应用更新参数校验。
 
@@ -557,12 +557,12 @@ def test_apply_update_admin(admin_client, monkeypatch):
     assert r.json()["status"] == "success"
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 运行：`.venv\Scripts\python.exe -m pytest tests/test_system_api.py`
 预期：FAIL
 
-- [ ] **Step 3: 实现 `backend/app/routers/system.py` 并注册到 `main.py`**
+- [x] **Step 3: 实现 `backend/app/routers/system.py` 并注册到 `main.py`**
 
 ```python
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -610,12 +610,12 @@ def apply_update(
 app.include_router(system.router, prefix="/api/system", tags=["system"])
 ```
 
-- [ ] **Step 4: 运行测试验证通过**
+- [x] **Step 4: 运行测试验证通过**
 
 运行：`.venv\Scripts\python.exe -m pytest tests/test_system_api.py`
 预期：PASS
 
-- [ ] **Step 5: 提交代码**
+- [x] **Step 5: 提交代码**
 
 ```bash
 git add backend/app/routers/system.py backend/app/main.py backend/tests/test_system_api.py
@@ -638,7 +638,7 @@ git commit -m "feat: add /api/system/update endpoints for check and apply"
   - `systemApi.healthCheck()`
   - `useSystemStore()`：管理当前版本、最新版本、更新日志、加速镜像配置、检查状态、升级动作与平滑重连轮询。
 
-- [ ] **Step 1: 编写 Store 单元测试 `frontend/src/stores/__tests__/system.spec.js`**
+- [x] **Step 1: 编写 Store 单元测试 `frontend/src/stores/__tests__/system.spec.js`**
 
 测试：检查更新、状态赋值、应用更新及重连健康检查。
 
@@ -676,12 +676,12 @@ describe('SystemStore', () => {
 })
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 运行：`npm test src/stores/__tests__/system.spec.js`
 预期：FAIL
 
-- [ ] **Step 3: 实现 `frontend/src/api/system.js` 与 `frontend/src/stores/system.js`**
+- [x] **Step 3: 实现 `frontend/src/api/system.js` 与 `frontend/src/stores/system.js`**
 
 `src/api/system.js`:
 ```javascript
@@ -775,12 +775,12 @@ export const useSystemStore = defineStore('system', () => {
 })
 ```
 
-- [ ] **Step 4: 运行测试验证通过**
+- [x] **Step 4: 运行测试验证通过**
 
 运行：`npm test src/stores/__tests__/system.spec.js`
 预期：PASS
 
-- [ ] **Step 5: 提交代码**
+- [x] **Step 5: 提交代码**
 
 ```bash
 git add frontend/src/api/system.js frontend/src/stores/system.js frontend/src/stores/__tests__/system.spec.js
@@ -800,7 +800,7 @@ git commit -m "feat: add frontend system API client and pinia store"
 - Consumes: `useSystemStore()`, `MainView.vue`
 - Produces: 完整交互的系统更新卡片与升级进度弹窗，支持心跳等待与自动刷新页面。
 
-- [ ] **Step 1: 编写组件测试 `frontend/src/components/__tests__/UpdatePanel.spec.js`**
+- [x] **Step 1: 编写组件测试 `frontend/src/components/__tests__/UpdatePanel.spec.js`**
 
 测试卡片渲染、检查更新按钮、新版本信息展示与更新触发逻辑。
 
@@ -837,12 +837,12 @@ describe('UpdatePanel', () => {
 })
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 运行：`npm test src/components/__tests__/UpdatePanel.spec.js`
 预期：FAIL
 
-- [ ] **Step 3: 创建 `frontend/src/components/UpdatePanel.vue`**
+- [x] **Step 3: 创建 `frontend/src/components/UpdatePanel.vue`**
 
 实现卡片式 UI：
 1. 当前系统版本与运行环境。
@@ -851,7 +851,7 @@ describe('UpdatePanel', () => {
 4. 发现新版本卡片：展示版本号、文件大小、发布说明（Release Notes）。
 5. 升级弹窗：展示步骤进度（下载校验 -> 部署覆盖 -> 重启中），自动轮询 `/api/health`，成功后提示并调用 `window.location.reload()`。
 
-- [ ] **Step 4: 在 `frontend/src/views/MainView.vue` 中挂载【系统更新】标签页**
+- [x] **Step 4: 在 `frontend/src/views/MainView.vue` 中挂载【系统更新】标签页**
 
 在 `MainView.vue` 中导入 `UpdatePanel.vue`，并在 `v-if="isAdmin"` 的标签组中追加：
 ```html
@@ -860,12 +860,12 @@ describe('UpdatePanel', () => {
 </el-tab-pane>
 ```
 
-- [ ] **Step 5: 运行前端全量测试验证**
+- [x] **Step 5: 运行前端全量测试验证**
 
 运行：`npm test`
 预期：所有前端测试全部 PASS。
 
-- [ ] **Step 6: 提交前端代码**
+- [x] **Step 6: 提交前端代码**
 
 ```bash
 git add frontend/src/components/UpdatePanel.vue frontend/src/components/__tests__/UpdatePanel.spec.js frontend/src/views/MainView.vue
@@ -882,19 +882,19 @@ git commit -m "feat: add UpdatePanel UI and mount system update tab in MainView"
 **Interfaces:**
 - Consumes: 全量测试套件与生产打包命令。
 
-- [ ] **Step 1: 运行全量后端测试**
+- [x] **Step 1: 运行全量后端测试**
 
 运行：`cd backend && .venv\Scripts\python.exe -m pytest tests`
 预期：所有测试通过（156+ passed）。
 
-- [ ] **Step 2: 运行全量前端测试**
+- [x] **Step 2: 运行全量前端测试**
 
 运行：`cd frontend && npm test`
 预期：所有测试通过（130+ passed）。
 
-- [ ] **Step 3: 运行前端生产编译构建**
+- [x] **Step 3: 运行前端生产编译构建**
 
 运行：`cd frontend && npm run build`
 预期：编译成功，生成 `frontend/dist` 无任何语法或构建报错。
 
-- [ ] **Step 4: 提交并推送到远端 (若用户确认)**
+- [x] **Step 4: 提交并推送到远端 (若用户确认)**
