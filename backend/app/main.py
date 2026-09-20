@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, backup, device_types, devices, external, users
+from app.routers import auth, backup, device_types, devices, external, system, users
 from app.routers import settings as settings_router
 
 
@@ -34,6 +34,7 @@ app.include_router(settings_router.router, prefix="/api/settings", tags=["settin
 app.include_router(device_types.router, prefix="/api/settings", tags=["settings"])
 app.include_router(external.router, prefix="/api/external", tags=["external"])
 app.include_router(backup.router, prefix="/api/backup", tags=["backup"])
+app.include_router(system.router, prefix="/api/system", tags=["system"])
 
 os.makedirs(settings.upload_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
