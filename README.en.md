@@ -43,9 +43,10 @@ A single multi-arch image (linux/amd64 + linux/arm64) is published to GitHub Con
 docker run -d --name weaver \
   --net=host \
   --cap-add=NET_RAW \
+  --restart unless-stopped \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=change-me-to-a-long-random-string \
-  ghcr.io/langdalebecks204-bit/webweaver:0.5.4
+  ghcr.io/langdalebecks204-bit/webweaver:0.5.8
 ```
 
 - `--net=host`: recommended network mode to allow direct ICMP and SNMP (UDP 161) communication with LAN devices/switches without Docker bridge subnet conflict.
@@ -58,16 +59,41 @@ You can also use `docker compose up -d` (see `docker-compose.yml` in the repo; e
 
 ### Upgrading
 
+#### Method 1: Web In-place Hot Update (Recommended)
+
+Since `v0.5.6`, WebWeaver supports one-click differential in-place updates from the Web UI:
+- Log in as admin and go to **System Settings -> In-place Update**.
+- Downloads a lightweight delta package (~3MB-5MB) directly from GitHub Releases, hot-replaces frontend/backend code, runs database migrations, and restarts in seconds without redownloading heavy full Docker images.
+
+**Troubleshooting & FAQ**:
+1. **GitHub Direct Connection 500 Error / Timeout**:
+   - In Mainland China, direct access to GitHub Release assets often gets throttled or blocked. Select a mirror acceleration proxy (such as `ghproxy.net` or `gh-proxy.com`) in the dropdown.
+2. **Upgrading from v0.5.6 to Newer Versions**:
+   - If currently on `0.5.6`, select the proxy mirror, click "Check Update", then **switch the mirror dropdown to "Direct (GitHub)" (do not click check again)** and click "Update Now". This bypasses the legacy proxy URL double-prefix issue. Fixed permanently in `v0.5.8+`.
+3. **PVE CT / LXC Container Stops after Hot Update (Requires Manual Start)**:
+   - **Symptom**: After updating, the Proxmox VE CT container enters the `Stopped` state.
+   - **Cause**: In-place update exits the process (`os._exit(0)`) to let the supervisor restart it. If WebWeaver is PID 1 in the LXC container or Docker has no restart policy, Linux shuts down the CT container upon PID 1 exit.
+   - **Solution**:
+     - **Manual Start**: Go to the PVE Web GUI and click **Start** on the CT container.
+     - **Auto-restart Configuration**:
+       - If running Docker inside CT: run `docker update --restart unless-stopped <container_name>`.
+       - If running as a standalone LXC container: enable "Start at boot" in PVE Options or configure systemd `Restart=always`.
+
+---
+
+#### Method 2: Docker Container Re-pull (Fallback)
+
 ```bash
 # Pinned tag (recommended)
-docker pull ghcr.io/langdalebecks204-bit/webweaver:0.5.4
+docker pull ghcr.io/langdalebecks204-bit/webweaver:0.5.8
 docker rm -f weaver
 docker run -d --name weaver \
   --net=host \
   --cap-add=NET_RAW \
+  --restart unless-stopped \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=change-me-to-a-long-random-string \
-  ghcr.io/langdalebecks204-bit/webweaver:0.5.4
+  ghcr.io/langdalebecks204-bit/webweaver:0.5.8
 
 # Or with compose
 docker compose pull
@@ -75,8 +101,8 @@ docker compose up -d
 ```
 
 - Data lives in the `webweaver-data:/data` volume; removing and recreating the container does **not** lose data.
-- After an upgrade, new tables (e.g. probe history) are created automatically at startup; no manual migration is needed.
-- Rollback: repeat the steps with an older image tag (e.g. `0.1.0`).
+- After an upgrade, new tables and schema migrations run automatically at startup; no manual migration is needed.
+- Rollback: repeat the steps with an older image tag (e.g. `0.5.7`).
 
 ## Monitoring Notes
 

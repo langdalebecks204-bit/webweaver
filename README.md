@@ -43,9 +43,10 @@ npm run dev
 docker run -d --name weaver \
   --net=host \
   --cap-add=NET_RAW \
+  --restart unless-stopped \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=请改成随机长字符串 \
-  ghcr.io/langdalebecks204-bit/webweaver:0.5.4
+  ghcr.io/langdalebecks204-bit/webweaver:0.5.8
 ```
 
 - `--net=host`：推荐网络模式，方便直接与局域网设备/交换机进行 ICMP 与 SNMP 161 端口通信（避开 Docker 虚拟网段冲突）。
@@ -58,16 +59,41 @@ docker run -d --name weaver \
 
 ### 更新版本
 
+#### 方式一：网页端一键在线热更新（推荐）
+
+自 `v0.5.6` 起，系统支持在 Web 界面内完成差量热更新：
+- 登录管理员账号，进入 **【系统管理】 -> 【在线更新】**。
+- 支持直接从 GitHub Release 获取仅约 3MB~5MB 的差量更新包，几秒内自动完成代码替换、数据库平滑迁移与服务重启，免去重新拉取全量 Docker 镜像，省时且避免损耗设备闪存寿命。
+
+**更新失败与常见问题排查**：
+1. **国内直连 GitHub 报 500 错误 / 超时**：
+   - 国内网络直接下载 GitHub Release 资产容易受阻超时。更新时请在镜像下拉框选择 **`ghproxy.net`** 或 **`gh-proxy.com`** 等国内加速源。
+2. **从 v0.5.6 升级到更高版本的技巧**：
+   - 若系统版本仍为 `0.5.6`，选择加速镜像点击【检查更新】后，**请将镜像下拉框切换为【官方直连】（切完后不要再点检查），直接点击【立即更新】**。这可规避 0.5.6 历史版本在双重代理组装上的缺陷。`v0.5.8` 及更高版本已修复此问题，后续更新直接一键点击即可。
+3. **PVE CT 容器 / LXC 容器热更新后关机（需手动启动）**：
+   - **现象**：热更新完成后显示正在重启，但在 Proxmox VE 中发现 CT 容器处于 `Stopped`（关机）状态。
+   - **原因**：热更新在覆盖代码后会通过让主进程正常退出（`os._exit(0)`）来交由守护进程拉起。在 PVE CT 容器中，如果 WebWeaver 进程是整个 CT 的主进程（PID 1），或者容器内 Docker 未配置重启策略，主进程退出会导致 Linux 内核判定容器生命周期结束而关闭 CT。
+   - **解决办法**：
+     - **手动启动**：在 PVE 管理界面中找到该 CT 容器，**手动点击一次【启动】**，即可正常加载并运行新版本。
+     - **一劳永逸设置自动重启**：
+       - 若 CT 内部通过 Docker 运行 WebWeaver，在 CT 终端执行：`docker update --restart unless-stopped <容器名>`。
+       - 若以独立 LXC 容器运行，在 PVE 宿主机设置中为该 CT 勾选【开机自启动】或在 CT 内通过 systemd 守护配置 `Restart=always`。
+
+---
+
+#### 方式二：Docker 容器重新拉取更新（兜底常规方式）
+
 ```bash
-# 固定 tag 方式（推荐）
-docker pull ghcr.io/langdalebecks204-bit/webweaver:0.5.4
+# 固定 tag 方式
+docker pull ghcr.io/langdalebecks204-bit/webweaver:0.5.8
 docker rm -f weaver
 docker run -d --name weaver \
   --net=host \
   --cap-add=NET_RAW \
+  --restart unless-stopped \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=请改成随机长字符串 \
-  ghcr.io/langdalebecks204-bit/webweaver:0.5.4
+  ghcr.io/langdalebecks204-bit/webweaver:0.5.8
 
 # 或 compose 方式
 docker compose pull
@@ -75,8 +101,8 @@ docker compose up -d
 ```
 
 - 数据保存在卷 `webweaver-data:/data`，删除重建容器**不会丢数据**。
-- 升级后启动时自动创建新表（如巡检历史表），旧数据无需手工迁移。
-- 回滚：把镜像 tag 换回旧版本（如 `0.1.0`）重复上述步骤即可。
+- 升级后启动时自动创建新表（如巡检历史表、新增设备字段），旧数据自动迁移无须人工干预。
+- 回滚：把镜像 tag 换回旧版本（如 `0.5.7`）重复上述步骤即可。
 
 ## 巡检说明
 
