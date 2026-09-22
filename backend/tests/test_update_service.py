@@ -24,6 +24,10 @@ def test_resolve_download_url():
     assert resolve_download_url(raw_url, "") == raw_url
     assert resolve_download_url(raw_url, "https://ghproxy.net/") == "https://ghproxy.net/" + raw_url
     assert resolve_download_url(raw_url, "https://ghproxy.net") == "https://ghproxy.net/" + raw_url
+    proxied_url = "https://ghproxy.net/" + raw_url
+    assert resolve_download_url(proxied_url, "https://ghproxy.net/") == proxied_url
+    assert resolve_download_url(proxied_url, "") == raw_url
+    assert resolve_download_url(proxied_url, "https://gh-proxy.com/") == "https://gh-proxy.com/" + raw_url
 
 
 def test_verify_update_archive_invalid(tmp_path):

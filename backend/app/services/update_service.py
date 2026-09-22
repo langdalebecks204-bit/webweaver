@@ -39,12 +39,16 @@ def compare_semver(v1: str, v2: str) -> int:
 
 
 def resolve_download_url(raw_url: str, mirror: str = "") -> str:
+    raw_url = (raw_url or "").strip()
     mirror = (mirror or "").strip()
+    import re
+    gh_match = re.search(r"https?://github\.com/.*", raw_url)
+    clean_url = gh_match.group(0) if gh_match else raw_url
     if not mirror:
-        return raw_url
+        return clean_url
     if not mirror.endswith("/"):
         mirror += "/"
-    return f"{mirror}{raw_url}"
+    return f"{mirror}{clean_url}"
 
 
 async def check_github_update(mirror: str = "") -> dict:
@@ -102,12 +106,19 @@ def verify_update_archive(archive_path: Path) -> bool:
 
 
 def download_file(url: str, dest_path: Path):
-    with httpx.stream("GET", url, timeout=60.0, follow_redirects=True) as resp:
-        if resp.status_code != 200:
-            raise RuntimeError(f"下载更新包失败 (HTTP {resp.status_code})")
-        with open(dest_path, "wb") as f:
-            for chunk in resp.iter_bytes(chunk_size=65536):
-                f.write(chunk)
+    headers = {
+        "User-Agent": "WebWeaver-AutoUpdate/1.0",
+        "Accept": "*/*",
+    }
+    try:
+        with httpx.stream("GET", url, timeout=60.0, follow_redirects=True, headers=headers) as resp:
+            if resp.status_code != 200:
+                raise RuntimeError(f"下载更新包失败 (HTTP {resp.status_code})，请尝试切换加速镜像源。")
+            with open(dest_path, "wb") as f:
+                for chunk in resp.iter_bytes(chunk_size=65536):
+                    f.write(chunk)
+    except httpx.RequestError as exc:
+        raise RuntimeError(f"连接下载源超时或失败 ({exc})，请检查网络或切换加速镜像源。")
 
 
 def _trigger_delayed_restart(delay_sec: float = 1.0):

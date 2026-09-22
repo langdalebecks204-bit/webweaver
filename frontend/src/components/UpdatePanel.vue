@@ -81,7 +81,7 @@ async function onApply() {
     }, 1500)
   } catch (error) {
     updating.value = false
-    ElMessage.error(error.message || error.response?.data?.detail || '升级或重启检测失败，请稍后重试。')
+    ElMessage.error(error.response?.data?.detail || error.message || '升级或重启检测失败，请稍后重试。')
   }
 }
 </script>
@@ -100,7 +100,7 @@ async function onApply() {
         <div class="info-item">
           <span class="label">当前运行版本：</span>
           <el-tag size="large" type="primary" effect="dark">
-            v{{ store.currentVersion || '0.5.7' }}
+            v{{ store.currentVersion || '0.5.8' }}
           </el-tag>
         </div>
 
