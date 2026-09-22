@@ -35,7 +35,7 @@ const targetEditing = ref(null)
 const targetForm = ref({ name: '', ip_address: '', domain: '', port: null })
 const deviceDialogVisible = ref(false)
 const deviceEditing = ref(null)
-const deviceForm = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, snmp_community: 'public', snmp_version: 'v2c', snmp_port: 161 })
+const deviceForm = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, snmp_enabled: true, snmp_community: 'public', snmp_version: 'v2c', snmp_port: 161 })
 const deviceCandidates = ref([])
 const portDialogVisible = ref(false)
 const portChildDevices = ref([])
@@ -234,6 +234,7 @@ function openDeviceEdit(device) {
     port_count: device.port_count ?? null,
     uplink_port: device.uplink_port ?? null,
     port_bindings: device.port_bindings ?? {},
+    snmp_enabled: device.snmp_enabled ?? true,
     snmp_community: device.snmp_community || 'public',
     snmp_version: device.snmp_version || 'v2c',
     snmp_port: device.snmp_port || 161,
@@ -260,6 +261,7 @@ async function onSaveDevice() {
     port_count: deviceForm.value.port_count,
     uplink_port: deviceForm.value.uplink_port,
     port_bindings: Object.keys(deviceForm.value.port_bindings).length ? deviceForm.value.port_bindings : null,
+    snmp_enabled: deviceForm.value.snmp_enabled ?? true,
   }
   try {
     await store.update(deviceEditing.value.id, payload)
@@ -500,25 +502,30 @@ async function onSaveDevice() {
           <el-form-item label="位置">
             <el-input v-model="deviceForm.location" placeholder="如：机房A/机架1（可选）" />
           </el-form-item>
-          <el-form-item v-if="deviceForm.type === 'switch' || deviceForm.type === 'unmanaged_switch'" label="端口总数">
+          <el-form-item v-if="deviceForm.type === 'switch' || deviceForm.type === 'unmanaged_switch' || deviceForm.type === 'router'" label="端口总数">
             <el-input-number v-model="deviceForm.port_count" :min="1" :max="48" />
           </el-form-item>
-          <el-form-item v-if="deviceForm.type === 'switch' || deviceForm.type === 'unmanaged_switch'" label="上联端口">
+          <el-form-item v-if="deviceForm.type === 'switch' || deviceForm.type === 'unmanaged_switch' || deviceForm.type === 'router'" label="上联端口">
             <el-input-number v-model="deviceForm.uplink_port" :min="1" :max="48" />
           </el-form-item>
-          <el-form-item v-if="deviceForm.type === 'switch'" label="SNMP 团体字">
-            <el-input v-model="deviceForm.snmp_community" placeholder="默认 public" />
+          <el-form-item v-if="deviceForm.type === 'switch' || deviceForm.type === 'router'" label="SNMP 功能">
+            <el-switch v-model="deviceForm.snmp_enabled" active-text="启用" inactive-text="停用" />
           </el-form-item>
-          <el-form-item v-if="deviceForm.type === 'switch'" label="SNMP 端口">
-            <el-input-number v-model="deviceForm.snmp_port" :min="1" :max="65535" placeholder="默认 161" />
-          </el-form-item>
-          <el-form-item v-if="deviceForm.type === 'switch'" label="SNMP 版本">
-            <el-select v-model="deviceForm.snmp_version" style="width: 100%">
-              <el-option label="v2c" value="v2c" />
-              <el-option label="v1" value="v1" />
-            </el-select>
-          </el-form-item>
-          <el-form-item v-if="deviceForm.type === 'switch' || deviceForm.type === 'unmanaged_switch'" label="端口绑定">
+          <template v-if="(deviceForm.type === 'switch' || deviceForm.type === 'router') && deviceForm.snmp_enabled">
+            <el-form-item label="SNMP 团体字">
+              <el-input v-model="deviceForm.snmp_community" placeholder="默认 public" />
+            </el-form-item>
+            <el-form-item label="SNMP 端口">
+              <el-input-number v-model="deviceForm.snmp_port" :min="1" :max="65535" placeholder="默认 161" />
+            </el-form-item>
+            <el-form-item label="SNMP 版本">
+              <el-select v-model="deviceForm.snmp_version" style="width: 100%">
+                <el-option label="v2c" value="v2c" />
+                <el-option label="v1" value="v1" />
+              </el-select>
+            </el-form-item>
+          </template>
+          <el-form-item v-if="deviceForm.type === 'switch' || deviceForm.type === 'unmanaged_switch' || deviceForm.type === 'router'" label="端口绑定">
             <el-button size="small" @click="openPortDialog">配置端口绑定</el-button>
           </el-form-item>
         </el-form>

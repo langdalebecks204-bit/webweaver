@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    :title="`交换机端口与实时带宽监控 - ${device?.name || ''}`"
+    :title="`${device?.type === 'router' ? '路由器' : '交换机'}端口与实时带宽监控 - ${device?.name || ''}`"
     width="900px"
     destroy-on-close
     @closed="onClose"
@@ -76,13 +76,13 @@
       </template>
 
       <!-- Empty / Error state -->
-      <el-empty v-else-if="!loading" description="未能获取到交换机 SNMP 接口信息，请确认交换机是否已启用 SNMP服务" />
+      <el-empty v-else-if="!loading" :description="emptyDescription" />
     </div>
   </el-dialog>
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
@@ -109,6 +109,14 @@ const selectedPort = ref(null)
 const autoRefresh = ref(false)
 const lastUpdated = ref('-')
 const chartRef = ref(null)
+
+const emptyDescription = computed(() => {
+  if (props.device?.snmp_enabled === false) {
+    return '未能获取到 SNMP 接口信息：该设备未启用 SNMP 功能'
+  }
+  const typeText = props.device?.type === 'router' ? '路由器' : '交换机'
+  return `未能获取到${typeText} SNMP 接口信息，请确认${typeText}是否已启用 SNMP服务`
+})
 
 let timer = null
 let chartInstance = null
@@ -140,6 +148,13 @@ function toggleAutoRefresh(val) {
 
 async function fetchData(silent = false) {
   if (!props.device?.id) return
+  if (props.device.snmp_enabled === false) {
+    interfaces.value = []
+    if (!silent) {
+      ElMessage.warning('该设备未启用 SNMP 功能')
+    }
+    return
+  }
   if (!silent) loading.value = true
   try {
     const res = await getDeviceSnmpInterfaces(props.device.id)

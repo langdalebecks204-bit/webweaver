@@ -7,7 +7,8 @@ from app.schemas import DeviceCreate, DeviceUpdate
 from app.services.device_types import is_valid_type
 
 
-_SWITCH_TYPES = {"switch", "unmanaged_switch"}
+_PORT_DEVICE_TYPES = {"switch", "unmanaged_switch", "router"}
+_SWITCH_TYPES = _PORT_DEVICE_TYPES
 
 
 def _validate_port_fields(db: Session, data: dict, port_count: int | None) -> None:
@@ -37,6 +38,7 @@ def device_to_dict(d: Device) -> dict:
         "port_count": d.port_count,
         "uplink_port": d.uplink_port,
         "port_bindings": d.port_bindings,
+        "snmp_enabled": d.snmp_enabled if d.snmp_enabled is not None else True,
         "snmp_community": d.snmp_community,
         "snmp_version": d.snmp_version,
         "snmp_port": d.snmp_port,
@@ -99,7 +101,7 @@ def create_device(db: Session, data: DeviceCreate) -> Device:
     if dup is not None:
         raise ValueError("device name already exists under this parent")
     payload = data.model_dump()
-    if data.type in _SWITCH_TYPES:
+    if data.type in _PORT_DEVICE_TYPES:
         _validate_port_fields(db, payload, payload.get("port_count"))
     else:
         payload.pop("port_count", None)
@@ -120,7 +122,7 @@ def update_device(db: Session, device_id: int, data: DeviceUpdate) -> Device:
     changes = data.model_dump(exclude_unset=True)
     if "type" in changes and not is_valid_type(db, changes["type"]):
         raise ValueError(f"invalid device type: {changes['type']}")
-    if changes.get("type", device.type) in _SWITCH_TYPES:
+    if changes.get("type", device.type) in _PORT_DEVICE_TYPES:
         _validate_port_fields(db, changes, changes.get("port_count", device.port_count))
     else:
         changes.pop("port_count", None)

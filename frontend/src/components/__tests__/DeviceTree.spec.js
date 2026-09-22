@@ -80,7 +80,7 @@ function mountTree(command = 'add-child', node = defaultNode) {
       stubs: {
         'el-dropdown': {
           emits: ['command'],
-          template: `<div class="dd" @click="$emit('command', '${command}')"><slot /></div>`,
+          template: `<div class="dd" @click="$emit('command', '${command}')"><slot /><slot name="dropdown" /></div>`,
         },
         'el-dropdown-menu': { template: '<div><slot /></div>' },
         'el-dropdown-item': { template: '<span><slot /></span>' },
@@ -108,6 +108,11 @@ function mountTree(command = 'add-child', node = defaultNode) {
           props: ['modelValue'],
           emits: ['update:modelValue'],
           template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', Number($event.target.value))" />',
+        },
+        'el-switch': {
+          props: ['modelValue'],
+          emits: ['update:modelValue'],
+          template: '<input type="checkbox" class="mock-switch" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
         },
         'el-icon': { template: '<span><slot /></span>' },
         'el-button': {
@@ -292,5 +297,71 @@ describe('DeviceTree 交换机端口字段', () => {
     expect(updateMock).toHaveBeenCalledWith(3, expect.objectContaining({
       port_bindings: { 1: { target_id: '4', type: 'downlink' } },
     }))
+  })
+
+  it('路由器类型编辑显示端口字段与SNMP功能', async () => {
+    const routerNode = {
+      id: 5,
+      name: 'RT',
+      parent_id: 1,
+      type: 'router',
+      ip_address: '10.0.0.1',
+      port_count: 8,
+      uplink_port: 1,
+      port_bindings: {},
+      snmp_enabled: true,
+      snmp_community: 'public',
+      snmp_version: 'v2c',
+      snmp_port: 161,
+      status: 'unknown',
+      children: [],
+    }
+    const wrapper = mountTree('edit', routerNode)
+    await wrapper.find('.dd').trigger('click')
+    expect(wrapper.text()).toContain('端口总数')
+    expect(wrapper.text()).toContain('上联端口')
+    expect(wrapper.text()).toContain('配置端口绑定')
+    expect(wrapper.text()).toContain('SNMP 功能')
+    expect(wrapper.text()).toContain('SNMP 团体字')
+  })
+
+  it('SNMP功能开关关闭时隐藏详细配置', async () => {
+    const routerNode = {
+      id: 5,
+      name: 'RT',
+      parent_id: 1,
+      type: 'router',
+      ip_address: '10.0.0.1',
+      port_count: 8,
+      uplink_port: 1,
+      snmp_enabled: true,
+      status: 'unknown',
+      children: [],
+    }
+    const wrapper = mountTree('edit', routerNode)
+    await wrapper.find('.dd').trigger('click')
+    expect(wrapper.text()).toContain('SNMP 团体字')
+
+    // 关闭 SNMP 开关
+    const checkbox = wrapper.find('.mock-switch')
+    await checkbox.setValue(false)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).not.toContain('SNMP 团体字')
+    expect(wrapper.text()).not.toContain('SNMP 端口')
+  })
+
+  it('SNMP未启用时右键菜单标注未启用', async () => {
+    const routerDisabled = {
+      id: 5,
+      name: 'RT',
+      parent_id: 1,
+      type: 'router',
+      ip_address: '10.0.0.1',
+      snmp_enabled: false,
+      status: 'unknown',
+      children: [],
+    }
+    const wrapper = mountTree('snmp', routerDisabled)
+    expect(wrapper.text()).toContain('(未启用)')
   })
 })

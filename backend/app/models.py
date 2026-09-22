@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -26,6 +26,7 @@ class Device(Base):
     port_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     uplink_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     port_bindings: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    snmp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     snmp_community: Mapped[str | None] = mapped_column(String(50), nullable=True, default="public")
     snmp_version: Mapped[str | None] = mapped_column(String(10), nullable=True, default="v2c")
     snmp_port: Mapped[int | None] = mapped_column(Integer, nullable=True, default=161)

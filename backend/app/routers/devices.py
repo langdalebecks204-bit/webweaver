@@ -193,10 +193,12 @@ def get_device_snmp_interfaces(
     _: object = Depends(get_current_user),
 ):
     device = _get_or_404(db, device_id)
-    if device.type != "switch":
-        raise HTTPException(status_code=400, detail="Device is not a switch")
+    if device.type not in ("switch", "router"):
+        raise HTTPException(status_code=400, detail="Device is not a switch or router")
+    if not device.snmp_enabled:
+        raise HTTPException(status_code=400, detail="SNMP is disabled for this device")
     if not device.ip_address:
-        raise HTTPException(status_code=400, detail="Switch IP address not configured")
+        raise HTTPException(status_code=400, detail="Device IP address not configured")
 
     from app.services.snmp import get_switch_interfaces
     interfaces = get_switch_interfaces(

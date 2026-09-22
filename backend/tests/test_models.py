@@ -36,6 +36,7 @@ def test_device_snmp_fields():
         assert saved.snmp_community == "public"
         assert saved.snmp_version == "v2c"
         assert saved.snmp_port == 161
+        assert saved.snmp_enabled is True
 
 
 def test_username_unique():

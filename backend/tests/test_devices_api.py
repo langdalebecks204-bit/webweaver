@@ -281,3 +281,37 @@ def test_non_switch_drops_port_fields(client, admin_headers):
     assert r.status_code == 201
     assert r.json()["port_count"] is None
     assert r.json()["uplink_port"] is None
+
+
+def test_router_port_fields_roundtrip(client, admin_headers):
+    target = client.post("/api/devices", headers=admin_headers,
+                         json={"name": "T_RT", "type": "terminal", "ip_address": "1.1.1.2"}).json()
+    router = client.post("/api/devices", headers=admin_headers,
+                         json={"name": "RT_CORE", "type": "router", "port_count": 8, "uplink_port": 1,
+                               "port_bindings": {"2": {"target_id": target["id"], "type": "downlink"}}})
+    assert router.status_code == 201
+    body = router.json()
+    assert body["port_count"] == 8
+    assert body["uplink_port"] == 1
+    assert body["port_bindings"]["2"]["target_id"] == target["id"]
+
+    got = client.get(f"/api/devices/{body['id']}", headers=admin_headers)
+    assert got.json()["port_count"] == 8
+    assert got.json()["uplink_port"] == 1
+    assert got.json()["port_bindings"]["2"]["target_id"] == target["id"]
+
+
+def test_device_snmp_enabled_default_and_toggle(client, admin_headers):
+    r = client.post("/api/devices", headers=admin_headers,
+                    json={"name": "RT_SNMP", "type": "router", "ip_address": "192.168.1.1"})
+    assert r.status_code == 201
+    dev = r.json()
+    assert dev["snmp_enabled"] is True
+
+    upd = client.put(f"/api/devices/{dev['id']}", headers=admin_headers,
+                     json={"snmp_enabled": False})
+    assert upd.status_code == 200
+    assert upd.json()["snmp_enabled"] is False
+
+    got = client.get(f"/api/devices/{dev['id']}", headers=admin_headers)
+    assert got.json()["snmp_enabled"] is False

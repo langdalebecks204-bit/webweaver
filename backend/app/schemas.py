@@ -37,6 +37,7 @@ class DeviceBase(BaseModel):
     port_count: int | None = Field(default=None, ge=1, le=48)
     uplink_port: int | None = Field(default=None, ge=1, le=48)
     port_bindings: dict[str, PortBinding] | None = None
+    snmp_enabled: bool = True
     snmp_community: str | None = "public"
     snmp_version: str | None = "v2c"
     snmp_port: int | None = Field(default=161, ge=1, le=65535)
@@ -56,6 +57,7 @@ class DeviceUpdate(BaseModel):
     port_count: int | None = Field(default=None, ge=1, le=48)
     uplink_port: int | None = Field(default=None, ge=1, le=48)
     port_bindings: dict[str, PortBinding] | None = None
+    snmp_enabled: bool | None = None
     snmp_community: str | None = None
     snmp_version: str | None = None
     snmp_port: int | None = Field(default=None, ge=1, le=65535)
