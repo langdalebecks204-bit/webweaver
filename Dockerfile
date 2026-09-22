@@ -1,5 +1,5 @@
 # ---- build stage ----
-FROM node:20-alpine AS frontend-build
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-build
 WORKDIR /build
 COPY frontend/package*.json ./
 RUN npm ci
