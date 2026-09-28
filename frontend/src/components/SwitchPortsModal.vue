@@ -180,23 +180,10 @@ async function fetchData(silent = false) {
 
     interfaces.value = rawInterfaces.map((port) => {
       let customDesc = port.custom_description
-      if (customDesc === undefined || customDesc === null || customDesc === '') {
+      if (!customDesc) {
         const b = bindings[String(port.if_index)]
-        if (b) {
-          const typeLabel = b.type === 'uplink' ? '上联' : '下联'
-          const targetName = b.target_id ? deviceMap.get(b.target_id) || '' : ''
-          const desc = (b.description || '').trim()
-          if (desc && targetName) {
-            customDesc = `[${typeLabel}] ${targetName} (${desc})`
-          } else if (desc) {
-            customDesc = desc
-          } else if (targetName) {
-            customDesc = `[${typeLabel}] ${targetName}`
-          } else {
-            customDesc = ''
-          }
-        } else {
-          customDesc = ''
+        if (b && b.target_id) {
+          customDesc = deviceMap.get(b.target_id) || ''
         }
       }
       return {

@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDevicesStore } from '../stores/devices'
 import { useSettingsStore } from '../stores/settings'
 import { allTypeOptions, typeIcon } from '../utils/deviceTypes'
+import { flattenTree } from '../stores/devicesHelpers'
 import PortBindingDialog from './PortBindingDialog.vue'
 
 const props = defineProps({ node: { type: Object, required: true } })
@@ -14,9 +15,26 @@ const dialogVisible = ref(false)
 const portDialogVisible = ref(false)
 const editing = ref(null)
 const form = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, snmp_enabled: true, snmp_community: 'public', snmp_version: 'v2c', snmp_port: 161, parent_id: null })
-const portChildDevices = computed(() =>
-  editing.value ? (props.node.children || []).map((c) => ({ id: c.id, name: c.name })) : []
-)
+
+function collectDescendantDevices(node, result = []) {
+  if (!node.children) return result
+  for (const c of node.children) {
+    if (c.type !== 'group') {
+      result.push({ id: c.id, name: c.name })
+    }
+    collectDescendantDevices(c, result)
+  }
+  return result
+}
+
+const portChildDevices = computed(() => {
+  if (!editing.value) return []
+  const list = collectDescendantDevices(props.node)
+  if (list.length === 0 && props.node.children) {
+    return props.node.children.map((c) => ({ id: c.id, name: c.name }))
+  }
+  return list
+})
 
 function openCreate(parentId) {
   editing.value = null
@@ -140,13 +158,33 @@ const parentCandidates = computed(() => {
 })
 
 const portParentDevices = computed(() => {
+  const flat = flattenTree(store.tree)
+  const flatMap = new Map(flat.map((d) => [d.id, d]))
   const raw = form.value.parent_id
   const pId = raw !== undefined && raw !== null && raw !== '' ? Number(raw) : (props.node.parent_id ?? null)
-  return parentCandidates.value
+
+  let nearestParentId = null
+  let curr = pId
+  while (curr) {
+    const d = flatMap.get(curr)
+    if (!d) break
+    if (d.type !== 'group') {
+      nearestParentId = d.id
+      break
+    }
+    curr = d.parent_id
+  }
+
+  const candidates = parentCandidates.value.filter((c) => {
+    const d = flatMap.get(c.id)
+    return d ? d.type !== 'group' : true
+  })
+
+  return candidates
     .map((c) => ({
       id: c.id,
       name: c.name,
-      isParent: c.id === pId,
+      isParent: c.id === (nearestParentId || pId),
     }))
     .sort((a, b) => (b.isParent ? 1 : 0) - (a.isParent ? 1 : 0))
 })

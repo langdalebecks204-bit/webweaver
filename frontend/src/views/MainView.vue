@@ -17,6 +17,7 @@ import TopologyView from '../components/TopologyView.vue'
 import PortBindingDialog from '../components/PortBindingDialog.vue'
 import SwitchPortsModal from '../components/SwitchPortsModal.vue'
 import { allTypeOptions, typeLabel } from '../utils/deviceTypes'
+import { flattenTree } from '../stores/devicesHelpers'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -41,12 +42,32 @@ const portDialogVisible = ref(false)
 const portChildDevices = ref([])
 const portParentDevices = computed(() => {
   if (!deviceEditing.value) return []
+  const flat = flattenTree(store.tree)
+  const flatMap = new Map(flat.map((d) => [d.id, d]))
   const pId = deviceEditing.value.parent_id ?? null
-  return deviceCandidates.value
+
+  let nearestParentId = null
+  let curr = pId
+  while (curr) {
+    const d = flatMap.get(curr)
+    if (!d) break
+    if (d.type !== 'group') {
+      nearestParentId = d.id
+      break
+    }
+    curr = d.parent_id
+  }
+
+  const candidates = deviceCandidates.value.filter((c) => {
+    const d = flatMap.get(c.id)
+    return d ? d.type !== 'group' : true
+  })
+
+  return candidates
     .map((c) => ({
       id: c.id,
       name: c.name,
-      isParent: c.id === pId,
+      isParent: c.id === (nearestParentId || pId),
     }))
     .sort((a, b) => (b.isParent ? 1 : 0) - (a.isParent ? 1 : 0))
 })
@@ -238,7 +259,18 @@ function openDeviceEdit(device) {
   walk(store.tree, 0)
   deviceCandidates.value = candidates
   deviceEditing.value = device
-  portChildDevices.value = (device.children || []).map((c) => ({ id: c.id, name: c.name }))
+  function collectDescendantDevices(node, result = []) {
+    if (!node.children) return result
+    for (const c of node.children) {
+      if (c.type !== 'group') {
+        result.push({ id: c.id, name: c.name })
+      }
+      collectDescendantDevices(c, result)
+    }
+    return result
+  }
+  const childList = collectDescendantDevices(device)
+  portChildDevices.value = childList.length ? childList : (device.children || []).map((c) => ({ id: c.id, name: c.name }))
   deviceForm.value = {
     name: device.name,
     type: device.type,

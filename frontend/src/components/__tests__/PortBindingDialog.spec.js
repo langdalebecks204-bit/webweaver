@@ -80,25 +80,26 @@ describe('PortBindingDialog', () => {
     })
   })
 
-  it('支持保存端口自定义说明与绑定', async () => {
+  it('切换下联时若之前选了上级设备则自动重置', async () => {
     const wrapper = mount(PortBindingDialog, {
       props: {
         modelValue: true,
         portCount: 2,
-        bindings: {
-          1: { target_id: 101, type: 'downlink', description: 'Web服务器' },
-          2: { target_id: null, type: 'downlink', description: '外网光纤' },
-        },
+        bindings: {},
         childDevices,
+        parentDevices,
       },
       global: { stubs },
     })
 
-    const save = wrapper.findAll('button').find((b) => b.text() === '保存')
-    await save.trigger('click')
-    expect(wrapper.emitted('save')[0][0]).toEqual({
-      1: { target_id: 101, type: 'downlink', description: 'Web服务器' },
-      2: { target_id: null, type: 'downlink', description: '外网光纤' },
-    })
+    // 设为上联并自动选择上级设备 201
+    wrapper.vm.rows[0].type = 'uplink'
+    wrapper.vm.onTypeChange(wrapper.vm.rows[0])
+    expect(wrapper.vm.rows[0].target_id).toBe(201)
+
+    // 切回下联时自动清空上级设备
+    wrapper.vm.rows[0].type = 'downlink'
+    wrapper.vm.onTypeChange(wrapper.vm.rows[0])
+    expect(wrapper.vm.rows[0].target_id).toBeNull()
   })
 })

@@ -219,22 +219,13 @@ def get_device_snmp_interfaces(
             type_label = "上联" if b_type == "uplink" else "下联"
             target_dev = db.get(Device, target_id) if target_id else None
             target_name = target_dev.name if target_dev else ""
-
-            if desc and target_name:
-                custom_desc = f"[{type_label}] {target_name} ({desc})"
-            elif desc:
-                custom_desc = desc
-            elif target_name:
-                custom_desc = f"[{type_label}] {target_name}"
-            else:
-                custom_desc = ""
+            custom_desc = target_name or desc
 
             item["custom_description"] = custom_desc
             item["binding"] = {
                 "target_id": target_id,
                 "target_name": target_name,
                 "type": b_type,
-                "description": desc,
             }
         else:
             item["custom_description"] = ""

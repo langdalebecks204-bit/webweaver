@@ -91,7 +91,7 @@ def test_get_device_snmp_interfaces_with_port_bindings(client, admin_headers, mo
 
     p1 = data["interfaces"][0]
     assert p1["if_index"] == 1
-    assert p1["custom_description"] == "[上联] CoreRouter (Trunk Link)"
+    assert p1["custom_description"] == "CoreRouter"
     assert p1["binding"]["target_name"] == "CoreRouter"
 
     p2 = data["interfaces"][1]

@@ -38,7 +38,6 @@ watch(
         port,
         target_id: existing ? existing.target_id : null,
         type: existing ? existing.type : 'downlink',
-        description: existing ? existing.description || '' : '',
       }
     })
   },
@@ -68,17 +67,11 @@ function onClose() {
 function onSave() {
   const result = {}
   for (const row of rows.value) {
-    const hasTarget = row.target_id !== null && row.target_id !== undefined && row.target_id !== ''
-    const desc = (row.description || '').trim()
-    if (hasTarget || desc) {
-      const item = {
-        target_id: hasTarget ? row.target_id : null,
+    if (row.target_id !== null && row.target_id !== undefined && row.target_id !== '') {
+      result[row.port] = {
+        target_id: row.target_id,
         type: row.type || 'downlink',
       }
-      if (desc) {
-        item.description = desc
-      }
-      result[row.port] = item
     }
   }
   emit('save', result)
@@ -87,12 +80,12 @@ function onSave() {
 </script>
 
 <template>
-  <el-dialog :model-value="modelValue" title="端口绑定配置" width="680px" @close="onClose">
+  <el-dialog :model-value="modelValue" title="端口绑定配置" width="540px" @close="onClose">
     <div v-for="row in rows" :key="row.port" class="port-row">
       <span class="port-num">Port {{ row.port }}</span>
       <el-select
         v-model="row.target_id"
-        :placeholder="row.type === 'uplink' ? '选择上级/上联设备' : '绑定设备'"
+        :placeholder="row.type === 'uplink' ? '选择上级/上联设备' : '绑定下联设备'"
         clearable
         class="bind-select"
       >
@@ -107,12 +100,6 @@ function onSave() {
         <el-option label="下联" value="downlink" />
         <el-option label="上联" value="uplink" />
       </el-select>
-      <el-input
-        v-model="row.description"
-        placeholder="端口自定义说明"
-        clearable
-        class="desc-input"
-      />
     </div>
     <template #footer>
       <el-button @click="onClose">取消</el-button>
@@ -134,12 +121,9 @@ function onSave() {
   font-weight: 500;
 }
 .bind-select {
-  width: 220px;
+  flex: 1;
 }
 .type-select {
-  width: 95px;
-}
-.desc-input {
-  flex: 1;
+  width: 100px;
 }
 </style>
