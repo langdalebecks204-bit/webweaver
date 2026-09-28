@@ -139,6 +139,22 @@ const parentCandidates = computed(() => {
   return result
 })
 
+const portParentDevices = computed(() => {
+  const raw = form.value.parent_id
+  const pId = raw !== undefined && raw !== null && raw !== '' ? Number(raw) : (props.node.parent_id ?? null)
+  return parentCandidates.value
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      isParent: c.id === pId,
+    }))
+    .sort((a, b) => (b.isParent ? 1 : 0) - (a.isParent ? 1 : 0))
+})
+
+const portParentDevice = computed(() => {
+  return portParentDevices.value.find((d) => d.isParent) || null
+})
+
 const typeOptions = computed(() =>
   allTypeOptions(settingsStore.builtinTypes, settingsStore.customTypes)
 )
@@ -253,6 +269,8 @@ onMounted(() => {
     :port-count="form.port_count || 0"
     :bindings="form.port_bindings"
     :child-devices="portChildDevices"
+    :parent-devices="portParentDevices"
+    :parent-device="portParentDevice"
     @save="onPortBindingsSave"
   />
 </template>

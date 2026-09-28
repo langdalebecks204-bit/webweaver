@@ -5,8 +5,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class PortBinding(BaseModel):
-    target_id: int
-    type: Literal["uplink", "downlink"]
+    target_id: int | None = None
+    type: Literal["uplink", "downlink"] = "downlink"
+    description: str | None = None
 
 
 class LoginRequest(BaseModel):

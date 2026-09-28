@@ -21,8 +21,9 @@ def _validate_port_fields(db: Session, data: dict, port_count: int | None) -> No
         port = int(key)
         if port_count is not None and (port < 1 or port > port_count):
             raise ValueError(f"port {port} out of range 1..{port_count}")
-        if db.get(Device, binding["target_id"]) is None:
-            raise ValueError(f"port binding target {binding['target_id']} not found")
+        target_id = binding.get("target_id")
+        if target_id is not None and db.get(Device, target_id) is None:
+            raise ValueError(f"port binding target {target_id} not found")
 
 
 def device_to_dict(d: Device) -> dict:

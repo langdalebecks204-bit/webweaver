@@ -29,6 +29,7 @@
         </div>
         <div class="port-tooltip">
           <div class="tooltip-title">{{ port.name }} ({{ port.status.toUpperCase() }})</div>
+          <div v-if="port.custom_description" class="tooltip-desc">{{ port.custom_description }}</div>
           <div>Speed: {{ port.speed_mbps ? port.speed_mbps + ' Mbps' : 'N/A' }}</div>
           <div>In: {{ port.in_rate_text }}</div>
           <div>Out: {{ port.out_rate_text }}</div>
@@ -174,6 +175,12 @@ const downCount = computed(() => props.interfaces.filter(i => i.status !== 'up')
 .tooltip-title {
   font-weight: bold;
   color: #63b3ed;
+  margin-bottom: 4px;
+}
+
+.tooltip-desc {
+  color: #f6ad55;
+  font-weight: 500;
   margin-bottom: 4px;
 }
 </style>

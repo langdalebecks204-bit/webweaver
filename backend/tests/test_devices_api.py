@@ -315,3 +315,18 @@ def test_device_snmp_enabled_default_and_toggle(client, admin_headers):
 
     got = client.get(f"/api/devices/{dev['id']}", headers=admin_headers)
     assert got.json()["snmp_enabled"] is False
+
+
+def test_switch_port_bindings_with_description(client, admin_headers):
+    target = client.post("/api/devices", headers=admin_headers,
+                         json={"name": "CoreRouter", "type": "router", "ip_address": "192.168.1.1"}).json()
+    sw = client.post("/api/devices", headers=admin_headers,
+                     json={"name": "AccessSW", "type": "switch", "port_count": 8,
+                           "port_bindings": {
+                               "1": {"target_id": target["id"], "type": "uplink", "description": "Uplink to Core"},
+                               "2": {"target_id": None, "type": "downlink", "description": "Printer Standalone"},
+                           }}).json()
+    assert sw["port_bindings"]["1"]["description"] == "Uplink to Core"
+    assert sw["port_bindings"]["1"]["target_id"] == target["id"]
+    assert sw["port_bindings"]["2"]["description"] == "Printer Standalone"
+    assert sw["port_bindings"]["2"]["target_id"] is None

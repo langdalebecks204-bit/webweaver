@@ -208,6 +208,38 @@ def get_device_snmp_interfaces(
         port=device.snmp_port or 161,
         version=device.snmp_version or "v2c",
     )
+    port_bindings = device.port_bindings or {}
+    for item in interfaces:
+        idx_str = str(item.get("if_index"))
+        binding = port_bindings.get(idx_str)
+        if binding:
+            target_id = binding.get("target_id")
+            b_type = binding.get("type", "downlink")
+            desc = (binding.get("description") or "").strip()
+            type_label = "上联" if b_type == "uplink" else "下联"
+            target_dev = db.get(Device, target_id) if target_id else None
+            target_name = target_dev.name if target_dev else ""
+
+            if desc and target_name:
+                custom_desc = f"[{type_label}] {target_name} ({desc})"
+            elif desc:
+                custom_desc = desc
+            elif target_name:
+                custom_desc = f"[{type_label}] {target_name}"
+            else:
+                custom_desc = ""
+
+            item["custom_description"] = custom_desc
+            item["binding"] = {
+                "target_id": target_id,
+                "target_name": target_name,
+                "type": b_type,
+                "description": desc,
+            }
+        else:
+            item["custom_description"] = ""
+            item["binding"] = None
+
     return {
         "device_id": device.id,
         "interfaces": interfaces,

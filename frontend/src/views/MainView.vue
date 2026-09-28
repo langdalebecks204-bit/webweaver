@@ -39,6 +39,20 @@ const deviceForm = ref({ name: '', type: 'group', ip_address: '', port: null, lo
 const deviceCandidates = ref([])
 const portDialogVisible = ref(false)
 const portChildDevices = ref([])
+const portParentDevices = computed(() => {
+  if (!deviceEditing.value) return []
+  const pId = deviceEditing.value.parent_id ?? null
+  return deviceCandidates.value
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      isParent: c.id === pId,
+    }))
+    .sort((a, b) => (b.isParent ? 1 : 0) - (a.isParent ? 1 : 0))
+})
+const portParentDevice = computed(() => {
+  return portParentDevices.value.find((d) => d.isParent) || null
+})
 const isAdmin = computed(() => auth.user?.role === 'admin')
 
 const typeOptions = computed(() => allTypeOptions(settings.builtinTypes, settings.customTypes))
@@ -540,6 +554,8 @@ async function onSaveDevice() {
         :port-count="deviceForm.port_count || 0"
         :bindings="deviceForm.port_bindings"
         :child-devices="portChildDevices"
+        :parent-devices="portParentDevices"
+        :parent-device="portParentDevice"
         @save="onPortBindingsSave"
       />
     </el-main>

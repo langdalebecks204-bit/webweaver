@@ -2,7 +2,7 @@
   <el-dialog
     v-model="visible"
     :title="`${device?.type === 'router' ? '路由器' : '交换机'}端口与实时带宽监控 - ${device?.name || ''}`"
-    width="900px"
+    width="960px"
     destroy-on-close
     @closed="onClose"
   >
@@ -36,7 +36,12 @@
         <!-- Realtime Bandwidth ECharts Graph for Selected Port -->
         <div v-if="selectedPort" class="chart-section">
           <div class="chart-header">
-            <h4>端口带宽实时趋势: {{ selectedPort.name }}</h4>
+            <h4>
+              端口带宽实时趋势: {{ selectedPort.name }}
+              <span v-if="selectedPort.custom_description" class="chart-port-desc">
+                ({{ selectedPort.custom_description }})
+              </span>
+            </h4>
             <div class="chart-rates">
               <span class="rate-in">入向: {{ selectedPort.in_rate_text }}</span>
               <span class="rate-out">出向: {{ selectedPort.out_rate_text }}</span>
@@ -57,6 +62,12 @@
           >
             <el-table-column prop="if_index" label="端口" width="70" align="center" />
             <el-table-column prop="name" label="接口名称" min-width="120" />
+            <el-table-column prop="custom_description" label="端口自定义说明" min-width="160" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span v-if="row.custom_description" class="custom-desc-text">{{ row.custom_description }}</span>
+                <span v-else class="custom-desc-empty">-</span>
+              </template>
+            </el-table-column>
             <el-table-column label="状态" width="90" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.status === 'up' ? 'success' : 'info'" size="small">
@@ -87,7 +98,11 @@ import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import { getDeviceSnmpInterfaces } from '../api/devices'
+import { useDevicesStore } from '../stores/devices'
+import { flattenTree } from '../stores/devicesHelpers'
 import SwitchPanel from './SwitchPanel.vue'
+
+const store = useDevicesStore()
 
 const props = defineProps({
   modelValue: {
@@ -158,7 +173,37 @@ async function fetchData(silent = false) {
   if (!silent) loading.value = true
   try {
     const res = await getDeviceSnmpInterfaces(props.device.id)
-    interfaces.value = res.data?.interfaces || res.interfaces || []
+    const rawInterfaces = res.data?.interfaces || res.interfaces || []
+    const bindings = props.device?.port_bindings || {}
+    const flatDevices = flattenTree(store.tree)
+    const deviceMap = new Map(flatDevices.map((d) => [d.id, d.name]))
+
+    interfaces.value = rawInterfaces.map((port) => {
+      let customDesc = port.custom_description
+      if (customDesc === undefined || customDesc === null || customDesc === '') {
+        const b = bindings[String(port.if_index)]
+        if (b) {
+          const typeLabel = b.type === 'uplink' ? '上联' : '下联'
+          const targetName = b.target_id ? deviceMap.get(b.target_id) || '' : ''
+          const desc = (b.description || '').trim()
+          if (desc && targetName) {
+            customDesc = `[${typeLabel}] ${targetName} (${desc})`
+          } else if (desc) {
+            customDesc = desc
+          } else if (targetName) {
+            customDesc = `[${typeLabel}] ${targetName}`
+          } else {
+            customDesc = ''
+          }
+        } else {
+          customDesc = ''
+        }
+      }
+      return {
+        ...port,
+        custom_description: customDesc || '',
+      }
+    })
     lastUpdated.value = new Date().toLocaleTimeString()
 
     // Update history for charts
@@ -332,5 +377,21 @@ onBeforeUnmount(() => {
 
 .table-section {
   margin-top: 10px;
+}
+
+.chart-port-desc {
+  font-size: 13px;
+  color: #d97706;
+  font-weight: 500;
+  margin-left: 6px;
+}
+
+.custom-desc-text {
+  color: #d97706;
+  font-weight: 500;
+}
+
+.custom-desc-empty {
+  color: #a0aec0;
 }
 </style>
