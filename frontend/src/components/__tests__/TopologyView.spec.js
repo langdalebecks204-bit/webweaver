@@ -9,6 +9,11 @@ let lastCallWasNew
 
 vi.mock('force-graph', () => ({ default: createMock }))
 
+vi.mock('../../api/devices', () => ({
+  getDeviceSnmpInterfaces: vi.fn().mockResolvedValue({ data: { interfaces: [] } }),
+}))
+
+
 const treeMock = vi.hoisted(() => [
   {
     id: 1,
@@ -64,6 +69,8 @@ describe('TopologyView', () => {
       onNodeHover: vi.fn(() => fgMock),
       width: vi.fn(() => fgMock),
       height: vi.fn(() => fgMock),
+      centerAt: vi.fn(() => fgMock),
+      zoomToFit: vi.fn(() => fgMock),
       destroy: vi.fn(() => fgMock),
     }
     createMock.mockReturnValue(fgMock)
@@ -311,5 +318,20 @@ describe('TopologyView', () => {
     await wrapper.find('.back-home').trigger('click')
     expect(exitSpy).toHaveBeenCalledTimes(1)
     expect(wrapper.emitted('back-home')).toBeTruthy()
+  })
+
+  it('正确将万兆、2.5G、千兆、百兆、离线与未知映射为对应链路颜色', async () => {
+    wrapper = mount(TopologyView, {
+      global: { stubs: { ElSlider: true, ElSwitch: true, ElButton: true } },
+    })
+    await flushPromises()
+
+    const linkColorFn = fgMock.linkColor.mock.calls[0][0]
+    expect(linkColorFn({ status: 'offline' })).toBe('#ef4444')
+    expect(linkColorFn({ status: 'online', speed_mbps: 10000 })).toBe('#3b82f6')
+    expect(linkColorFn({ status: 'online', speed_mbps: 2500 })).toBe('#39ff14')
+    expect(linkColorFn({ status: 'online', speed_mbps: 1000 })).toBe('#10b981')
+    expect(linkColorFn({ status: 'online', speed_mbps: 100 })).toBe('#f97316')
+    expect(linkColorFn({ status: 'online', speed_mbps: 0 })).toBe('#94a3b8')
   })
 })

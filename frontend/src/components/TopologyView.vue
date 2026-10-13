@@ -4,6 +4,8 @@ import ForceGraph from 'force-graph'
 import { useDevicesStore } from '../stores/devices'
 import { typeGlyph } from '../utils/deviceTypes'
 import { treeToGraph } from '../utils/treeToGraph'
+import { getDeviceSnmpInterfaces } from '../api/devices'
+import { SPEED_COLORS, getLinkColor } from '../utils/topologyLinks'
 
 const store = useDevicesStore()
 const graphEl = ref(null)
@@ -13,6 +15,8 @@ const hoverNodeId = ref(null)
 const labelFontSize = ref(6)
 const showLabels = ref(true)
 const isFullscreen = ref(false)
+const snmpSpeedMap = ref(new Map())
+const isSnmpLoading = ref(false)
 
 const emit = defineEmits(['back-home'])
 
@@ -73,11 +77,7 @@ function particleSpeed(link) {
 }
 
 function particleColor(link) {
-  const lat = link.target.latency_ms
-  if (lat == null) return '#6b7280'
-  if (lat <= 50) return '#34d399'
-  if (lat <= 200) return '#fbbf24'
-  return '#ef4444'
+  return getLinkColor(link, snmpSpeedMap.value)
 }
 
 function isHighlighted(node) {
@@ -121,6 +121,39 @@ function drawNode(node, ctx) {
   }
 }
 
+async function fetchSnmpLinkSpeeds() {
+  if (!graphData.value.nodes.length) return
+  isSnmpLoading.value = true
+  try {
+    const swNodes = graphData.value.nodes.filter(
+      (n) => (n.type === 'switch' || n.type === 'router') && n.ip_address
+    )
+    const results = await Promise.allSettled(
+      swNodes.map(async (sw) => {
+        const res = await getDeviceSnmpInterfaces(sw.id)
+        return { swId: sw.id, interfaces: res.data?.interfaces || [] }
+      })
+    )
+    const map = new Map()
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value) {
+        const { swId, interfaces } = r.value
+        for (const iface of interfaces) {
+          const targetId = iface.binding?.target_id
+          if (targetId) {
+            map.set(`${swId}->${targetId}`, iface.speed_mbps || 0)
+          }
+        }
+      }
+    }
+    snmpSpeedMap.value = map
+  } catch (err) {
+    console.error('Failed to fetch snmp link speeds', err)
+  } finally {
+    isSnmpLoading.value = false
+  }
+}
+
 function renderGraph() {
   if (!graphEl.value || !graphData.value.nodes.length) return
   fg = new ForceGraph(graphEl.value)
@@ -129,7 +162,7 @@ function renderGraph() {
     .nodeRelSize(1)
     .nodeCanvasObjectMode(() => 'replace')
     .nodeCanvasObject(drawNode)
-    .linkColor(() => 'rgba(148,163,184,0.6)')
+    .linkColor((link) => getLinkColor(link, snmpSpeedMap.value))
     .linkDirectionalParticles(particleCount)
     .linkDirectionalParticleSpeed(particleSpeed)
     .linkDirectionalParticleWidth(2)
@@ -139,13 +172,17 @@ function renderGraph() {
     })
     .width(graphEl.value.clientWidth)
     .height(graphEl.value.clientHeight)
+
+  fg.centerAt?.(0, 0, 400)
+  fg.zoomToFit?.(400, 30)
+
   if (!resizeObserver && typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver(syncSize)
     resizeObserver.observe(graphEl.value)
   }
 }
 
-const NODE_FIELDS = ['name', 'type', 'status', 'latency_ms', 'ip_address', 'val']
+const NODE_FIELDS = ['name', 'type', 'status', 'latency_ms', 'ip_address', 'val', 'fx', 'fy', 'layer', 'port_bindings']
 
 function syncGraphData() {
   if (!fg || !graphData.value.nodes.length) return
@@ -159,8 +196,10 @@ function syncGraphData() {
     }
     return { ...n }
   })
-  const links = graphData.value.links.map((l) => ({ source: l.source, target: l.target }))
+  const links = graphData.value.links.map((l) => ({ source: l.source, target: l.target, status: l.status }))
   fg.graphData({ nodes, links })
+  fg.centerAt?.(0, 0, 400)
+  fg.zoomToFit?.(400, 30)
 }
 
 watch(
@@ -174,6 +213,7 @@ watch(
     } catch (e) {
       error.value = `图谱初始化失败：${e.message}`
     }
+    fetchSnmpLinkSpeeds()
   }
 )
 
@@ -185,6 +225,7 @@ onMounted(async () => {
   } catch (e) {
     error.value = `图谱初始化失败：${e.message}`
   }
+  fetchSnmpLinkSpeeds()
 })
 
 onBeforeUnmount(() => {
@@ -215,6 +256,25 @@ onBeforeUnmount(() => {
         />
         <span class="label">显示标签</span>
         <el-switch v-model="showLabels" />
+
+        <div class="legend-group">
+          <span class="legend-item"><span class="legend-dot offline" />离线</span>
+          <span class="legend-item"><span class="legend-dot speed-100m" />百兆</span>
+          <span class="legend-item"><span class="legend-dot speed-1000m" />千兆</span>
+          <span class="legend-item"><span class="legend-dot speed-2500m" />2.5G</span>
+          <span class="legend-item"><span class="legend-dot speed-10000m" />万兆</span>
+          <span class="legend-item"><span class="legend-dot unknown" />未知</span>
+        </div>
+
+        <el-button
+          size="small"
+          :loading="isSnmpLoading"
+          class="refresh-btn"
+          @click="fetchSnmpLinkSpeeds"
+        >
+          刷新链路
+        </el-button>
+
         <a v-if="isFullscreen" class="back-home" href="#" @click.prevent="backHome">← 返回主页</a>
         <el-button size="small" class="fullscreen-btn" @click="toggleFullscreen">
           {{ isFullscreen ? '退出全屏' : '全屏' }}
@@ -259,14 +319,59 @@ onBeforeUnmount(() => {
   color: #94a3b8;
   background: #111c31;
   border-bottom: 1px solid #1e293b;
+  flex-wrap: wrap;
 }
 .topo-toolbar .label {
   font-size: 13px;
   white-space: nowrap;
 }
 .topo-toolbar .font-slider {
-  width: 160px;
+  width: 140px;
   margin: 0 8px;
+}
+.legend-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 6px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.legend-dot.offline {
+  background: #ef4444;
+}
+.legend-dot.speed-100m {
+  background: #f97316;
+}
+.legend-dot.speed-1000m {
+  background: #10b981;
+}
+.legend-dot.speed-2500m {
+  background: #39ff14;
+}
+.legend-dot.speed-10000m {
+  background: #3b82f6;
+}
+.legend-dot.unknown {
+  background: #94a3b8;
+}
+.refresh-btn {
+  margin-left: 6px;
 }
 .topo-toolbar .fullscreen-btn {
   margin-left: auto;
