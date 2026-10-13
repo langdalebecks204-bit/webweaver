@@ -365,3 +365,20 @@ describe('DeviceTree 交换机端口字段', () => {
     expect(wrapper.text()).toContain('(未启用)')
   })
 })
+
+describe('DeviceTree 节点ID展示', () => {
+  it('显示节点的设备ID徽标', () => {
+    const node = {
+      id: 42,
+      name: '核心交换机',
+      type: 'switch',
+      status: 'online',
+      parent_id: null,
+    }
+    const wrapper = mountTree('edit', node)
+    const idBadge = wrapper.find('.node-id')
+    expect(idBadge.exists()).toBe(true)
+    expect(idBadge.text()).toBe('#42')
+  })
+})
+

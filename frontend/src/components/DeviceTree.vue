@@ -209,6 +209,7 @@ onMounted(() => {
         <component :is="typeIcon(props.node.type, settingsStore.customTypes)" />
       </el-icon>
       <span class="status-dot" :class="props.node.status" />
+      <span class="node-id">#{{ props.node.id }}</span>
       <span class="node-name">{{ props.node.name }}</span>
       <span v-if="props.node.ip_address" class="node-meta">{{ props.node.ip_address }}</span>
       <span v-if="props.node.latency_ms != null" class="node-meta">
@@ -343,5 +344,16 @@ onMounted(() => {
 .node-meta {
   color: #909399;
   font-size: 12px;
+}
+.node-id {
+  font-family: monospace, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  background: rgba(148, 163, 184, 0.15);
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  user-select: none;
 }
 </style>
