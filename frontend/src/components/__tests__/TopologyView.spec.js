@@ -145,7 +145,7 @@ describe('TopologyView', () => {
     const ctx = { fillStyle: '', font: '', textAlign: '', fillText: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), fill: vi.fn(), globalAlpha: 1, shadowColor: '', shadowBlur: 0 }
     const node = { id: 3, name: '节点C', type: 'terminal', status: 'online', val: 8, x: 10, y: 10 }
     draw(node, ctx)
-    expect(ctx.font).toBe('6px sans-serif')
+    expect(ctx.font).toBe('10px sans-serif')
     // 修改字号
     const slider = wrapper.findComponent({ name: 'ElSlider' })
     expect(slider.exists()).toBe(true)
@@ -272,7 +272,7 @@ describe('TopologyView', () => {
     }
     const node = { id: 3, name: '核心交换机', type: 'switch', status: 'online', val: 8, x: 50, y: 60 }
     draw(node, ctx)
-    expect(ctx.arc).toHaveBeenCalledWith(50, 60, 8, 0, 2 * Math.PI, false)
+    expect(ctx.arc).toHaveBeenCalledWith(50, 60, 26, 0, 2 * Math.PI, false)
     expect(baselines).toContain('middle')
     expect(ctx.fillText).toHaveBeenCalledWith('🔀', 50, 60)
   })

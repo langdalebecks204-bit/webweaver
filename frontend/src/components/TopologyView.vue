@@ -12,7 +12,7 @@ const graphEl = ref(null)
 const wrapEl = ref(null)
 const error = ref('')
 const hoverNodeId = ref(null)
-const labelFontSize = ref(6)
+const labelFontSize = ref(10)
 const showLabels = ref(true)
 const isFullscreen = ref(false)
 const snmpSpeedMap = ref(new Map())
@@ -91,7 +91,9 @@ function isHighlighted(node) {
 }
 
 function drawNode(node, ctx) {
-  const r = Math.max(8, Math.sqrt(node.val))
+  const isCore = node.layer === 0 || (node.type === 'switch' && (node.name?.includes('核心') || node.id === graphData.value.coreNodeId))
+  const baseR = isCore ? 26 : (node.type === 'switch' || node.type === 'router' ? 22 : 18)
+  const r = Math.max(baseR, Math.sqrt(node.val || 8) * 1.6)
   const color = STATUS_COLORS[node.status] || '#6b7280'
   const now = Date.now()
   let alpha = isHighlighted(node) ? 1 : 0.08
@@ -103,21 +105,22 @@ function drawNode(node, ctx) {
   ctx.arc(node.x, node.y, r, 0, 2 * Math.PI, false)
   ctx.fillStyle = color
   ctx.shadowColor = color
-  ctx.shadowBlur = node.status === 'unknown' ? 4 : 14
+  ctx.shadowBlur = node.status === 'unknown' ? 4 : 16
   ctx.fill()
   ctx.shadowBlur = 0
   ctx.globalAlpha = 1
-  ctx.fillStyle = 'rgba(255,255,255,0.92)'
-  ctx.font = '10px sans-serif'
+  ctx.fillStyle = 'rgba(255,255,255,0.95)'
+  const iconSize = Math.round(r * 0.95)
+  ctx.font = `${iconSize}px sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(typeGlyph(node.type), node.x, node.y)
   ctx.textBaseline = 'alphabetic'
   if (showLabels.value || node.id === hoverNodeId.value) {
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'
     ctx.font = `${labelFontSize.value}px sans-serif`
     ctx.textAlign = 'center'
-    ctx.fillText(node.name, node.x, node.y - r - 4)
+    ctx.fillText(node.name, node.x, node.y - r - 6)
   }
 }
 

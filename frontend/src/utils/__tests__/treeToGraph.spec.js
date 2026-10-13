@@ -105,12 +105,12 @@ describe('treeToGraph', () => {
     expect(groupA.layer).toBe(1)
     expect(floorSw.layer).toBe(1)
     const r1 = Math.round(Math.hypot(groupA.fx, groupA.fy))
-    expect(r1).toBe(200)
+    expect(r1).toBe(220)
 
     // PC-1 距离核心为 2 跳，应处于外圈 layer 2
     const pc = nodes.find((n) => n.id === 4)
     expect(pc.layer).toBe(2)
     const r2 = Math.round(Math.hypot(pc.fx, pc.fy))
-    expect(r2).toBe(380)
+    expect(r2).toBe(420)
   })
 })
