@@ -38,6 +38,7 @@ watch(
         port,
         target_id: existing ? existing.target_id : null,
         type: existing ? existing.type : 'downlink',
+        speed_mbps: existing?.speed_mbps ?? 0,
       }
     })
   },
@@ -68,10 +69,14 @@ function onSave() {
   const result = {}
   for (const row of rows.value) {
     if (row.target_id !== null && row.target_id !== undefined && row.target_id !== '') {
-      result[row.port] = {
+      const item = {
         target_id: row.target_id,
         type: row.type || 'downlink',
       }
+      if (row.speed_mbps) {
+        item.speed_mbps = row.speed_mbps
+      }
+      result[row.port] = item
     }
   }
   emit('save', result)
@@ -80,7 +85,7 @@ function onSave() {
 </script>
 
 <template>
-  <el-dialog :model-value="modelValue" title="端口绑定配置" width="540px" @close="onClose">
+  <el-dialog :model-value="modelValue" title="端口绑定配置" width="650px" @close="onClose">
     <div v-for="row in rows" :key="row.port" class="port-row">
       <span class="port-num">Port {{ row.port }}</span>
       <el-select
@@ -99,6 +104,13 @@ function onSave() {
       <el-select v-model="row.type" class="type-select" @change="onTypeChange(row)">
         <el-option label="下联" value="downlink" />
         <el-option label="上联" value="uplink" />
+      </el-select>
+      <el-select v-model="row.speed_mbps" class="speed-select" placeholder="速率">
+        <el-option :value="0" label="自动/SNMP" />
+        <el-option :value="100" label="100M" />
+        <el-option :value="1000" label="1000M" />
+        <el-option :value="2500" label="2.5G" />
+        <el-option :value="10000" label="10G" />
       </el-select>
     </div>
     <template #footer>
@@ -124,6 +136,9 @@ function onSave() {
   flex: 1;
 }
 .type-select {
-  width: 100px;
+  width: 90px;
+}
+.speed-select {
+  width: 115px;
 }
 </style>

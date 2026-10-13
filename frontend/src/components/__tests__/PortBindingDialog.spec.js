@@ -102,4 +102,30 @@ describe('PortBindingDialog', () => {
     wrapper.vm.onTypeChange(wrapper.vm.rows[0])
     expect(wrapper.vm.rows[0].target_id).toBeNull()
   })
+
+  it('支持配置自定义端口速率并保存', async () => {
+    const wrapper = mount(PortBindingDialog, {
+      props: {
+        modelValue: true,
+        portCount: 2,
+        bindings: {
+          1: { target_id: 101, type: 'downlink', speed_mbps: 1000 },
+        },
+        childDevices,
+      },
+      global: { stubs },
+    })
+
+    const save = wrapper.findAll('button').find((b) => b.text() === '保存')
+    await save.trigger('click')
+
+    expect(wrapper.emitted('save')).toBeTruthy()
+    const saved = wrapper.emitted('save')[0][0]
+    expect(saved['1']).toEqual({
+      target_id: 101,
+      type: 'downlink',
+      speed_mbps: 1000,
+    })
+  })
 })
+
