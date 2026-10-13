@@ -51,6 +51,66 @@ describe('treeToGraph', () => {
   })
 
   it('空树返回空', () => {
-    expect(treeToGraph([])).toEqual({ nodes: [], links: [] })
+    const res = treeToGraph([])
+    expect(res.nodes).toEqual([])
+    expect(res.links).toEqual([])
+  })
+
+  it('识别核心交换机并将节点排布为以核心为中心的分层同心圆', () => {
+    const topologyTree = [
+      {
+        id: 1,
+        name: '机房A',
+        type: 'group',
+        parent_id: null,
+        children: [
+          {
+            id: 2,
+            name: '核心交换机',
+            type: 'switch',
+            parent_id: 1,
+            children: [
+              {
+                id: 3,
+                name: '楼层交换机1',
+                type: 'switch',
+                parent_id: 2,
+                children: [
+                  {
+                    id: 4,
+                    name: 'PC-1',
+                    type: 'terminal',
+                    parent_id: 3,
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]
+
+    const { nodes, coreNodeId } = treeToGraph(topologyTree)
+    expect(coreNodeId).toBe(2)
+
+    const core = nodes.find((n) => n.id === 2)
+    expect(core.fx).toBe(0)
+    expect(core.fy).toBe(0)
+    expect(core.layer).toBe(0)
+
+    // 直连核心的节点（机房A为上级、楼层交换机1为下级）应处于内圈 layer 1
+    const groupA = nodes.find((n) => n.id === 1)
+    const floorSw = nodes.find((n) => n.id === 3)
+    expect(groupA.layer).toBe(1)
+    expect(floorSw.layer).toBe(1)
+    const r1 = Math.round(Math.hypot(groupA.fx, groupA.fy))
+    expect(r1).toBe(200)
+
+    // PC-1 距离核心为 2 跳，应处于外圈 layer 2
+    const pc = nodes.find((n) => n.id === 4)
+    expect(pc.layer).toBe(2)
+    const r2 = Math.round(Math.hypot(pc.fx, pc.fy))
+    expect(r2).toBe(380)
   })
 })
