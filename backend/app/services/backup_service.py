@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import io
 import json
 import os
@@ -6,7 +6,7 @@ from typing import Any
 import zipfile
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -50,18 +50,44 @@ def _to_timestamp(val: Any) -> int | None:
 
 
 def _stream_history_to_zip(db: Session, zf: zipfile.ZipFile) -> None:
-    stmt = (
-        select(
-            ProbeRecord.device_id,
-            ProbeRecord.checked_at,
-            ProbeRecord.status,
-            ProbeRecord.latency_ms,
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    c15 = (now - timedelta(days=15)).strftime("%Y-%m-%d %H:%M:%S")
+    c30 = (now - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+
+    query = text("""
+        SELECT device_id, checked_at, status, latency_ms FROM (
+            SELECT device_id, checked_at, status, latency_ms
+            FROM probe_records
+            WHERE checked_at >= :c15
+
+            UNION ALL
+
+            SELECT device_id, checked_at, status, latency_ms
+            FROM probe_records
+            WHERE checked_at >= :c30 AND checked_at < :c15 AND status != 'online'
+
+            UNION ALL
+
+            SELECT device_id, strftime('%Y-%m-%d %H:00:00', checked_at) as checked_at, 'online' as status, CAST(ROUND(AVG(latency_ms)) AS INTEGER) as latency_ms
+            FROM probe_records
+            WHERE checked_at >= :c30 AND checked_at < :c15 AND status = 'online'
+            GROUP BY device_id, strftime('%Y-%m-%d %H:00:00', checked_at)
+
+            UNION ALL
+
+            SELECT device_id, strftime('%Y-%m-%d 00:00:00', checked_at) as checked_at,
+                   CASE WHEN COUNT(CASE WHEN status = 'online' THEN 1 END) > 0 THEN 'online' ELSE 'offline' END as status,
+                   CAST(ROUND(AVG(CASE WHEN status = 'online' THEN latency_ms ELSE NULL END)) AS INTEGER) as latency_ms
+            FROM probe_records
+            WHERE checked_at < :c30
+            GROUP BY device_id, strftime('%Y-%m-%d 00:00:00', checked_at)
         )
-        .order_by(ProbeRecord.device_id, ProbeRecord.checked_at)
-        .execution_options(yield_per=1000)
-    )
+        ORDER BY device_id, checked_at
+    """)
+
     with zf.open("history.jsonl", "w") as f:
-        for row in db.execute(stmt):
+        buffer = []
+        for row in db.execute(query, {"c15": c15, "c30": c30}):
             dt_str = _format_datetime(row[1])
             if not dt_str:
                 continue
@@ -77,7 +103,12 @@ def _stream_history_to_zip(db: Session, zf: zipfile.ZipFile) -> None:
                 )
                 + "\n"
             )
-            f.write(line.encode("utf-8"))
+            buffer.append(line)
+            if len(buffer) >= 1000:
+                f.write("".join(buffer).encode("utf-8"))
+                buffer.clear()
+        if buffer:
+            f.write("".join(buffer).encode("utf-8"))
 
 
 def _valid_types(db: Session) -> set[str]:

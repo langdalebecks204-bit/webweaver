@@ -457,3 +457,84 @@ def test_export_and_import_zip_streaming_history(client, admin_headers):
     with SessionLocal() as db:
         count = db.query(ProbeRecord).filter(ProbeRecord.device_id == new_dev["id"]).count()
         assert count == 2000
+
+
+def test_backup_history_downsampling_rules(client, admin_headers):
+    from datetime import datetime, timedelta, timezone
+    from app.models import ProbeRecord
+
+    dev = client.post(
+        "/api/devices",
+        headers=admin_headers,
+        json={"name": "downsample_test_dev", "type": "switch", "ip_address": "10.2.2.2"},
+    ).json()
+    dev_id = dev["id"]
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # 1. Recent records (< 15 days): 3 records
+    recent_records = [
+        {"device_id": dev_id, "checked_at": now - timedelta(days=2), "status": "online", "latency_ms": 10},
+        {"device_id": dev_id, "checked_at": now - timedelta(days=2, minutes=5), "status": "online", "latency_ms": 20},
+        {"device_id": dev_id, "checked_at": now - timedelta(days=2, minutes=10), "status": "offline", "latency_ms": None},
+    ]
+
+    # 2. Mid records (15 ~ 30 days):
+    # Same hour: 2 online (latency 15 and 25 -> avg 20) + 1 offline (packet loss, must be kept)
+    mid_hour_base = (now - timedelta(days=20)).replace(minute=0, second=0, microsecond=0)
+    mid_records = [
+        {"device_id": dev_id, "checked_at": mid_hour_base + timedelta(minutes=5), "status": "online", "latency_ms": 15},
+        {"device_id": dev_id, "checked_at": mid_hour_base + timedelta(minutes=15), "status": "online", "latency_ms": 25},
+        {"device_id": dev_id, "checked_at": mid_hour_base + timedelta(minutes=25), "status": "offline", "latency_ms": None},
+    ]
+
+    # 3. Old records (> 30 days):
+    # Same day (40 days ago): 3 online (latency 30, 40, 50 -> avg 40) + 1 offline
+    # Rule: only keep daily average!
+    old_day_base = (now - timedelta(days=40)).replace(hour=0, minute=0, second=0, microsecond=0)
+    old_records = [
+        {"device_id": dev_id, "checked_at": old_day_base + timedelta(hours=8), "status": "online", "latency_ms": 30},
+        {"device_id": dev_id, "checked_at": old_day_base + timedelta(hours=14), "status": "online", "latency_ms": 40},
+        {"device_id": dev_id, "checked_at": old_day_base + timedelta(hours=20), "status": "online", "latency_ms": 50},
+        {"device_id": dev_id, "checked_at": old_day_base + timedelta(hours=22), "status": "offline", "latency_ms": None},
+    ]
+
+    with SessionLocal() as db:
+        db.bulk_insert_mappings(ProbeRecord, recent_records + mid_records + old_records)
+        db.commit()
+
+    r = client.get("/api/backup/export", headers=admin_headers)
+    assert r.status_code == 200
+
+    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+        lines = [
+            json.loads(line)
+            for line in zf.read("history.jsonl").decode("utf-8").strip().splitlines()
+        ]
+        dev_lines = [item for item in lines if item["device_id"] == dev_id]
+
+        # Expect:
+        # - 3 recent records kept as-is
+        # - 1 hourly average record (online, 20ms) + 1 offline packet loss record for mid
+        # - 1 daily average record (online, 40ms) for old
+        # Total = 3 + 2 + 1 = 6 records (downsampled from 10)
+        assert len(dev_lines) == 6
+
+        # Check old record
+        old_exported = [d for d in dev_lines if d["checked_at"].startswith(old_day_base.strftime("%Y-%m-%d"))]
+        assert len(old_exported) == 1
+        assert old_exported[0]["status"] == "online"
+        assert old_exported[0]["latency_ms"] == 40
+        assert old_exported[0]["checked_at"].endswith("00:00:00")
+
+        # Check mid records
+        mid_exported = [
+            d for d in dev_lines
+            if mid_hour_base.strftime("%Y-%m-%d") in d["checked_at"]
+        ]
+        assert len(mid_exported) == 2
+        mid_online = next(d for d in mid_exported if d["status"] == "online")
+        mid_offline = next(d for d in mid_exported if d["status"] == "offline")
+        assert mid_online["latency_ms"] == 20
+        assert mid_online["checked_at"].endswith(":00:00")
+        assert mid_offline["latency_ms"] is None
