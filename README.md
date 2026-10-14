@@ -57,6 +57,24 @@ docker run -d --name weaver \
 
 也可用 `docker compose up -d`（见仓库 `docker-compose.yml`，env 参考 `compose.env.example`）。
 
+## Ubuntu / Linux 原生一键部署（无需容器）
+
+适合不想使用 Docker，希望直接在 Ubuntu / Debian 服务器裸机运行的场景。系统提供了一键全自动安装脚本（自动安装 Python 3 环境、Node.js 20、编译前端、配置 ICMP 权限与 Systemd 开机自启服务）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/langdalebecks204-bit/webweaver/main/install.sh | sudo bash
+```
+
+或克隆代码后直接执行：
+```bash
+sudo bash install.sh
+```
+
+脚本执行完毕后将输出 Web 访问地址（默认端口 `8000`，默认账号 `admin` / `admin123`），并由 `systemctl` 自动守护运行。常用管理命令：
+- 查看状态：`sudo systemctl status webweaver`
+- 实时日志：`sudo journalctl -u webweaver -f`
+- 重启服务：`sudo systemctl restart webweaver`
+
 ### 更新版本
 
 #### 方式一：网页端一键在线热更新（推荐）

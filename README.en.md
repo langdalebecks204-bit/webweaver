@@ -57,6 +57,25 @@ docker run -d --name weaver \
 
 You can also use `docker compose up -d` (see `docker-compose.yml` in the repo; env reference in `compose.env.example`).
 
+## Ubuntu / Linux Native One-Click Deployment (Without Docker)
+
+For environments where containerization is not desired, WebWeaver provides an automated bare-metal deployment script for Ubuntu/Debian (sets up Python 3 virtual environment, Node.js 20, frontend compilation, ICMP capabilities, and systemd service):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/langdalebecks204-bit/webweaver/main/install.sh | sudo bash
+```
+
+Or clone the repo and run directly:
+```bash
+sudo bash install.sh
+```
+
+Upon completion, access the web UI at `http://<server-ip>:8000` (default credentials: `admin` / `admin123`).
+Service management commands:
+- Status: `sudo systemctl status webweaver`
+- Logs: `sudo journalctl -u webweaver -f`
+- Restart: `sudo systemctl restart webweaver`
+
 ### Upgrading
 
 #### Method 1: Web In-place Hot Update (Recommended)
