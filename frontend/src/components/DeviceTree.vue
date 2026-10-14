@@ -13,6 +13,7 @@ const store = useDevicesStore()
 const settingsStore = useSettingsStore()
 const dialogVisible = ref(false)
 const portDialogVisible = ref(false)
+const submitting = ref(false)
 const editing = ref(null)
 const form = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, snmp_enabled: true, snmp_community: 'public', snmp_version: 'v2c', snmp_port: 161, parent_id: null })
 
@@ -71,6 +72,8 @@ function onPortBindingsSave(bindings) {
 }
 
 async function submit() {
+  if (submitting.value) return
+  submitting.value = true
   const rawParentId = form.value.parent_id
   const parentId =
     rawParentId === '' || rawParentId === null || rawParentId === undefined
@@ -100,6 +103,8 @@ async function submit() {
     ElMessage.success('已保存')
   } catch (error) {
     ElMessage.error(error.response?.data?.detail || '保存失败')
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -221,6 +226,7 @@ onMounted(() => {
         <el-dropdown-item command="add-child">添加子节点</el-dropdown-item>
         <el-dropdown-item command="add-sibling">添加同级</el-dropdown-item>
         <el-dropdown-item command="edit">编辑</el-dropdown-item>
+        <el-dropdown-item command="detail">设备详情</el-dropdown-item>
         <el-dropdown-item
           v-if="props.node.type === 'switch' || props.node.type === 'router'"
           command="snmp"
@@ -299,7 +305,7 @@ onMounted(() => {
     </el-form>
     <template #footer>
       <el-button @click="dialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="submit">保存</el-button>
+      <el-button type="primary" :loading="submitting" @click="submit">保存</el-button>
     </template>
   </el-dialog>
 

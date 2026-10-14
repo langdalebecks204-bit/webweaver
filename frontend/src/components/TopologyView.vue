@@ -124,13 +124,20 @@ function drawNode(node, ctx) {
   }
 }
 
+let snmpDebounceTimer = null
+
 async function fetchSnmpLinkSpeeds() {
-  if (!graphData.value.nodes.length) return
+  if (!graphData.value.nodes.length || isSnmpLoading.value) return
   isSnmpLoading.value = true
   try {
     const swNodes = graphData.value.nodes.filter(
-      (n) => (n.type === 'switch' || n.type === 'router') && n.ip_address
+      (n) =>
+        (n.type === 'switch' || n.type === 'router') &&
+        n.ip_address &&
+        n.snmp_enabled !== false &&
+        n.status !== 'offline'
     )
+    if (!swNodes.length) return
     const results = await Promise.allSettled(
       swNodes.map(async (sw) => {
         const res = await getDeviceSnmpInterfaces(sw.id)
@@ -155,6 +162,13 @@ async function fetchSnmpLinkSpeeds() {
   } finally {
     isSnmpLoading.value = false
   }
+}
+
+function queueFetchSnmpLinkSpeeds() {
+  if (snmpDebounceTimer) clearTimeout(snmpDebounceTimer)
+  snmpDebounceTimer = setTimeout(() => {
+    fetchSnmpLinkSpeeds()
+  }, 1000)
 }
 
 function renderGraph() {
@@ -216,7 +230,7 @@ watch(
     } catch (e) {
       error.value = `图谱初始化失败：${e.message}`
     }
-    fetchSnmpLinkSpeeds()
+    queueFetchSnmpLinkSpeeds()
   }
 )
 
@@ -228,10 +242,14 @@ onMounted(async () => {
   } catch (e) {
     error.value = `图谱初始化失败：${e.message}`
   }
-  fetchSnmpLinkSpeeds()
+  queueFetchSnmpLinkSpeeds()
 })
 
 onBeforeUnmount(() => {
+  if (snmpDebounceTimer) {
+    clearTimeout(snmpDebounceTimer)
+    snmpDebounceTimer = null
+  }
   document.removeEventListener('fullscreenchange', onFsChange)
   if (resizeObserver) {
     resizeObserver.disconnect()

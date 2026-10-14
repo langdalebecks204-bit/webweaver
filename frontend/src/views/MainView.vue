@@ -35,6 +35,7 @@ const targetDialogVisible = ref(false)
 const targetEditing = ref(null)
 const targetForm = ref({ name: '', ip_address: '', domain: '', port: null })
 const deviceDialogVisible = ref(false)
+const deviceSubmitting = ref(false)
 const deviceEditing = ref(null)
 const deviceForm = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, snmp_enabled: true, snmp_community: 'public', snmp_version: 'v2c', snmp_port: 161 })
 const deviceCandidates = ref([])
@@ -297,6 +298,8 @@ function onPortBindingsSave(bindings) {
 }
 
 async function onSaveDevice() {
+  if (deviceSubmitting.value) return
+  deviceSubmitting.value = true
   const parentId = deviceEditing.value.parent_id
   const payload = {
     ...deviceForm.value,
@@ -315,6 +318,8 @@ async function onSaveDevice() {
     ElMessage.success('已保存')
   } catch (error) {
     ElMessage.error(error.response?.data?.detail || '保存失败')
+  } finally {
+    deviceSubmitting.value = false
   }
 }
 </script>
@@ -577,7 +582,7 @@ async function onSaveDevice() {
         </el-form>
         <template #footer>
           <el-button @click="deviceDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="onSaveDevice">保存</el-button>
+          <el-button type="primary" :loading="deviceSubmitting" @click="onSaveDevice">保存</el-button>
         </template>
       </el-dialog>
 

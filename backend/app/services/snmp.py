@@ -154,7 +154,7 @@ def build_snmp_getnext_packet(community: str, oid_str: str, request_id: int = 10
     return message
 
 
-def snmp_walk(ip: str, community: str, root_oid: str, port: int = 161, version: str = "v2c", timeout: float = 1.0) -> Dict[str, Any]:
+def snmp_walk(ip: str, community: str, root_oid: str, port: int = 161, version: str = "v2c", timeout: float = 0.5) -> Dict[str, Any]:
     results = {}
     curr_oid = root_oid
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -209,17 +209,25 @@ def get_switch_interfaces(
     community: str = "public",
     port: int = 161,
     version: str = "v2c",
-    timeout: float = 1.0
+    timeout: float = 0.5
 ) -> List[Dict[str, Any]]:
     """Walk IF-MIB and return status and real-time bandwidth for all interfaces."""
-    # 1. Walk descriptions and status
+    # 1. Walk descriptions and status with fast-fail
     descrs = snmp_walk(ip, community, OID_IF_DESCR, port, version, timeout)
     names = {}
     if not descrs:
         # Fallback to ifName if ifDescr is not implemented (common on whitebox/FreeRTOS/OEM switches)
         names = snmp_walk(ip, community, OID_IF_NAME, port, version, timeout)
 
-    statuses = snmp_walk(ip, community, OID_IF_OPER_STATUS, port, version, timeout)
+    # Fast-fail check: If neither descrs nor names returned anything, check if device responds to status at all
+    if not descrs and not names:
+        statuses = snmp_walk(ip, community, OID_IF_OPER_STATUS, port, version, timeout)
+        if not statuses:
+            # Device does not respond to SNMP (offline, firewall block, or service disabled)
+            return []
+    else:
+        statuses = snmp_walk(ip, community, OID_IF_OPER_STATUS, port, version, timeout)
+
     speeds = snmp_walk(ip, community, OID_IF_SPEED, port, version, timeout)
     high_speeds = snmp_walk(ip, community, OID_IF_HIGH_SPEED, port, version, timeout)
     in_octets = snmp_walk(ip, community, OID_IF_HC_IN_OCTETS, port, version, timeout)
