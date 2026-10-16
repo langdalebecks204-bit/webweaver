@@ -179,10 +179,19 @@ npm run test
 - `GET /api/devices/{id}/history?days=7` — probe history (any logged-in user)
 - `GET /api/settings/inspection-interval` — probe interval (admin)
 - `GET|PUT /api/settings/probe-history-days` — history retention days (admin)
-- `GET|POST|PUT|DELETE /api/users` — user management (admin)
-- `GET|POST /api/external` — external targets (admin)
-- `GET|PUT /api/backup` — backup & restore (admin)
+- `POST /api/topology/lldp-discover` — LLDP + Bridge FDB topology discovery (supports brand & whitebox switches)
+- `POST /api/topology/apply-lldp` — Apply discovered links to port bindings and topology hierarchy
+- `GET /api/topology/diag` — Switch SNMP/LLDP/FDB diagnostic probe
+- `GET /api/assets` — LAN IP-MAC assets discovery list with OUI vendor lookup
+- `POST /api/assets/scan` — Scan gateway ARP / switch FDB to refresh assets
+- `POST /api/assets/{id}/import-device` — Import discovered asset into device tree
+- `GET /api/system/update/check` — Check for updates from GitHub Release
+- `POST /api/system/update/apply` — In-place online system update
 
-## Roadmap (Phase 3)
+## Roadmap
+
+- Optical transceiver DDM (temperature, optical TX/RX power) monitoring
+- WebSocket real-time state streaming
+- Extended whitebox / unmanaged switch topology inference
 
 WebSocket live status push, MySQL support, packet-loss statistics.

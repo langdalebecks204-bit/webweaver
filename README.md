@@ -177,10 +177,18 @@ npm run test
 - `GET /api/devices/{id}/history?days=7` 巡检历史（登录即可）
 - `GET /api/settings/inspection-interval` 巡检间隔（admin）
 - `GET|PUT /api/settings/probe-history-days` 历史保留天数（admin）
-- `GET|POST|PUT|DELETE /api/users` 用户管理（admin）
-- `GET|POST /api/external` 外网目标（admin）
-- `GET|PUT /api/backup` 备份与恢复（admin）
+- `POST /api/topology/lldp-discover` LLDP + Bridge FDB 物理拓扑自动探测（支持品牌与白牌交换机）
+- `POST /api/topology/apply-lldp` 应用探测到的端口互联至设备端口绑定与拓扑树
+- `GET /api/topology/diag` 单交换机 SNMP/LLDP/FDB 连通性排障诊断
+- `GET /api/assets` IP-MAC 局域网资产发现列表与 OUI 厂商解析
+- `POST /api/assets/scan` 扫描网关/交换机 ARP 表与转发表刷新在线资产
+- `POST /api/assets/{id}/import-device` 资产一键导入为设备树节点
+- `GET /api/system/update/check` 检查 GitHub 最新版本与更新包
+- `POST /api/system/update/apply` 系统一键在线平滑热更新
 
-## 后续（Phase 3）
+## 后续规划
 
-WebSocket 实时状态推送、MySQL 支持、掉包率统计。
+- 交换机光口光衰与光模块 DDM 实时监控
+- WebSocket 实时状态流式推送
+- 更多国产白牌网络设备的深度适配
+
