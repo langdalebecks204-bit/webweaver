@@ -44,3 +44,31 @@ def apply_lldp_connections(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to apply LLDP topology: {str(e)}",
         )
+
+
+@router.get("/diag")
+def diag_device_lldp(
+    ip: str,
+    community: str | None = None,
+    port: int = 161,
+    version: str = "v2c",
+    db: Session = Depends(get_db),
+    _: object = Depends(get_current_user),
+):
+    """Diagnose LLDP & SNMP connectivity for a single switch IP."""
+    from sqlalchemy import select
+    from app.models import Device
+    from app.services.lldp import diag_lldp_connection
+
+    # If community not provided, try resolving from Device record
+    if not community:
+        dev = db.scalars(select(Device).where(Device.ip_address == ip)).first()
+        if dev:
+            community = dev.snmp_community or "public"
+            port = dev.snmp_port or 161
+            version = dev.snmp_version or "v2c"
+        else:
+            community = "public"
+
+    return diag_lldp_connection(ip=ip, community=community, port=port, version=version)
+

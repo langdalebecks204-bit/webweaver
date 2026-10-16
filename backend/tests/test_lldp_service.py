@@ -145,3 +145,100 @@ def test_apply_lldp_topology():
         # Hierarchy: sw2 becomes child of CoreSwitch
         assert sw2.parent_id == sw1.id
 
+
+def test_get_device_fdb_table(monkeypatch):
+    from app.services.lldp import get_device_fdb_table
+
+    # Mock snmp_walk
+    def mock_snmp_walk(ip, community, root_oid, *args, **kwargs):
+        if "1.3.6.1.2.1.2.2.1.2" in root_oid:
+            # loc_ports
+            return {
+                "1.3.6.1.2.1.2.2.1.2.1": b"MultiGigabitEthernet1",
+                "1.3.6.1.2.1.2.2.1.2.24": b"MultiGigabitEthernet24",
+            }
+        elif "1.3.6.1.2.1.17.4.3.1.2" in root_oid:
+            # FDB port table: MAC -> port
+            return {
+                # 84:94:59:1C:F7:B4 on port 1
+                "1.3.6.1.2.1.17.4.3.1.2.132.148.89.28.247.180": 1,
+                # 60:BE:B4:1A:E5:70 on port 24
+                "1.3.6.1.2.1.17.4.3.1.2.96.190.180.26.229.112": 24,
+            }
+        return {}
+
+    monkeypatch.setattr("app.services.lldp.snmp_walk", mock_snmp_walk)
+
+    fdb = get_device_fdb_table("172.16.2.26", "public")
+    assert len(fdb) == 2
+    p1 = next(item for item in fdb if item["local_port_num"] == 1)
+    assert p1["local_port_name"] == "MultiGigabitEthernet1"
+    assert p1["learned_mac"] == "84:94:59:1C:F7:B4"
+
+    p24 = next(item for item in fdb if item["local_port_num"] == 24)
+    assert p24["local_port_name"] == "MultiGigabitEthernet24"
+    assert p24["learned_mac"] == "60:BE:B4:1A:E5:70"
+
+
+def test_discover_all_lldp_topology_with_fdb_fallback(monkeypatch):
+    from app.database import SessionLocal, init_db
+    from app.models import Device
+    from app.services.lldp import discover_all_lldp_topology
+
+    init_db()
+    with SessionLocal() as db:
+        # Create Main Switch (Whitebox without LLDP)
+        sw_main = Device(
+            name="ZX-SWTGW2224AS",
+            type="switch",
+            ip_address="172.16.2.26",
+            mac_address="00:11:22:AA:BB:CC",
+            snmp_enabled=True,
+            port_count=24,
+        )
+        # Create Target Device (Router with MAC)
+        ros_router = Device(
+            name="MikroTik-Router",
+            type="router",
+            ip_address="172.16.2.1",
+            mac_address="60:BE:B4:1A:E5:70",
+            snmp_enabled=False,
+            port_count=8,
+        )
+        db.add_all([sw_main, ros_router])
+        db.commit()
+
+        # Mock: LLDP returns empty, FDB returns MikroTik on port 24
+        monkeypatch.setattr("app.services.lldp.get_device_lldp_neighbors", lambda *args, **kwargs: [])
+        monkeypatch.setattr(
+            "app.services.lldp.get_device_fdb_table",
+            lambda *args, **kwargs: [
+                {
+                    "local_port_num": 24,
+                    "local_port_name": "MultiGigabitEthernet24",
+                    "learned_mac": "60:BE:B4:1A:E5:70",
+                },
+                {
+                    "local_port_num": 1,
+                    "local_port_name": "MultiGigabitEthernet1",
+                    "learned_mac": "84:94:59:1C:F7:B4",  # Hikvision unmanaged
+                },
+            ],
+        )
+
+        res = discover_all_lldp_topology(db)
+        assert len(res["links"]) == 1
+        link = res["links"][0]
+        assert link["source_name"] == "ZX-SWTGW2224AS"
+        assert link["source_port"] == "MultiGigabitEthernet24"
+        assert link["target_name"] == "MikroTik-Router"
+
+        # Check unmatched
+        unmatched = res["unmatched_neighbors"]
+        assert len(unmatched) >= 1
+        hk = next((u for u in unmatched if "84:94:59" in u["remote_chassis_id"]), None)
+        assert hk is not None
+        assert hk["local_port"] == "MultiGigabitEthernet1"
+        assert hk["remote_sys_name"] == "Hikvision"
+
+

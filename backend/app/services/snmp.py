@@ -20,6 +20,12 @@ OID_IP_NET_TO_MEDIA_PHYS = "1.3.6.1.2.1.4.22.1.2"
 OID_IP_NET_TO_MEDIA_NET = "1.3.6.1.2.1.4.22.1.3"
 OID_IP_NET_TO_MEDIA_TYPE = "1.3.6.1.2.1.4.22.1.4"
 
+# Raw SNMP OID Constants for BRIDGE-MIB (RFC 1493 - MAC Forwarding Table)
+OID_DOT1D_BASE_BRIDGE_ADDRESS = "1.3.6.1.2.1.17.1.1.0"
+OID_DOT1D_BASE_PORT_IF_INDEX = "1.3.6.1.2.1.17.1.4.1.2"
+OID_DOT1D_TP_FDB_PORT = "1.3.6.1.2.1.17.4.3.1.2"
+OID_DOT1D_TP_FDB_STATUS = "1.3.6.1.2.1.17.4.3.1.3"
+
 # Raw SNMP OID Constants for LLDP-MIB (IEEE 802.1AB)
 OID_LLDP_LOC_PORT_ID = "1.0.8802.1.1.2.1.3.7.1.3"
 OID_LLDP_LOC_PORT_DESC = "1.0.8802.1.1.2.1.3.7.1.4"
@@ -167,6 +173,89 @@ def build_snmp_getnext_packet(community: str, oid_str: str, request_id: int = 10
 
     message = b"\x30" + encode_asn1_length(len(ver_bytes) + len(comm_asn1) + len(pdu)) + ver_bytes + comm_asn1 + pdu
     return message
+
+
+def build_snmp_get_packet(community: str, oid_str: str, request_id: int = 100, version: str = "v2c") -> bytes:
+    ver_num = 1 if version == "v2c" else 0
+    ver_bytes = b"\x02\x01" + bytes([ver_num])
+    
+    comm_bytes = community.encode("utf-8")
+    comm_asn1 = b"\x04" + encode_asn1_length(len(comm_bytes)) + comm_bytes
+
+    oid_bytes = encode_oid(oid_str)
+    varbind = (
+        b"\x30"
+        + encode_asn1_length(len(oid_bytes) + 4)
+        + b"\x06"
+        + encode_asn1_length(len(oid_bytes))
+        + oid_bytes
+        + b"\x05\x00"  # NULL
+    )
+    varbind_list = b"\x30" + encode_asn1_length(len(varbind)) + varbind
+
+    req_id_bytes = request_id.to_bytes(4, byteorder="big")
+    pdu_contents = (
+        b"\x02\x04" + req_id_bytes + b"\x02\x01\x00\x02\x01\x00" + varbind_list
+    )
+    pdu = b"\xa0" + encode_asn1_length(len(pdu_contents)) + pdu_contents  # 0xa0 = GetRequest
+
+    message = b"\x30" + encode_asn1_length(len(ver_bytes) + len(comm_asn1) + len(pdu)) + ver_bytes + comm_asn1 + pdu
+    return message
+
+
+def snmp_get_scalar(
+    ip: str,
+    community: str,
+    oid_str: str,
+    port: int = 161,
+    version: str = "v2c",
+    timeout: float = 1.0,
+) -> Optional[Any]:
+    """Query a single SNMP scalar OID with GetRequest and fallback to GetNextRequest."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(timeout)
+    try:
+        # Try GetRequest first
+        pkt = build_snmp_get_packet(community, oid_str, request_id=1, version=version)
+        sock.sendto(pkt, (ip, port))
+        data, _ = sock.recvfrom(4096)
+        _, msg_el, _ = decode_asn1(data)
+        if isinstance(msg_el, list) and len(msg_el) >= 3:
+            pdu_el = msg_el[2]
+            if isinstance(pdu_el, list) and len(pdu_el) >= 4 and pdu_el[1] == 0:  # error_status == 0
+                vbs = pdu_el[3]
+                if isinstance(vbs, list) and vbs and len(vbs[0]) >= 2:
+                    val = vbs[0][1]
+                    if val is not None:
+                        return val
+    except Exception:
+        pass
+    finally:
+        sock.close()
+
+    # Fallback to GetNextRequest (for cases where scalar must be queried without trailing .0)
+    root_query = oid_str.rstrip(".0") if oid_str.endswith(".0") else oid_str
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(timeout)
+    try:
+        pkt = build_snmp_getnext_packet(community, root_query, request_id=2, version=version)
+        sock.sendto(pkt, (ip, port))
+        data, _ = sock.recvfrom(4096)
+        _, msg_el, _ = decode_asn1(data)
+        if isinstance(msg_el, list) and len(msg_el) >= 3:
+            pdu_el = msg_el[2]
+            if isinstance(pdu_el, list) and len(pdu_el) >= 4 and pdu_el[1] == 0:
+                vbs = pdu_el[3]
+                if isinstance(vbs, list) and vbs and len(vbs[0]) >= 2:
+                    ret_oid = str(vbs[0][0])
+                    if ret_oid == oid_str or ret_oid.startswith(root_query + "."):
+                        return vbs[0][1]
+    except Exception:
+        pass
+    finally:
+        sock.close()
+
+    return None
 
 
 def snmp_walk(

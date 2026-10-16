@@ -4,10 +4,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Device
-from app.services.oui import normalize_mac
+from app.services.oui import normalize_mac, lookup_vendor
 from app.services.snmp import (
     OID_IF_DESCR,
     OID_IF_NAME,
+    OID_DOT1D_BASE_BRIDGE_ADDRESS,
+    OID_DOT1D_BASE_PORT_IF_INDEX,
+    OID_DOT1D_TP_FDB_PORT,
+    OID_DOT1D_TP_FDB_STATUS,
     OID_LLDP_LOC_PORT_DESC,
     OID_LLDP_LOC_PORT_ID,
     OID_LLDP_REM_CHASSIS_ID,
@@ -16,6 +20,7 @@ from app.services.snmp import (
     OID_LLDP_REM_PORT_ID,
     OID_LLDP_REM_SYS_NAME,
     snmp_walk,
+    snmp_get_scalar,
 )
 
 
@@ -271,8 +276,96 @@ def get_device_lldp_neighbors(
     )
 
 
+def get_switch_base_mac(
+    ip: str,
+    community: str = "public",
+    port: int = 161,
+    version: str = "v2c",
+    timeout: float = 1.0,
+) -> Optional[str]:
+    """Query dot1dBaseBridgeAddress (1.3.6.1.2.1.17.1.1.0) for switch Base MAC."""
+    val = snmp_get_scalar(ip, community, OID_DOT1D_BASE_BRIDGE_ADDRESS, port, version, timeout)
+    if isinstance(val, (bytes, bytearray)) and len(val) == 6:
+        return ":".join(f"{b:02X}" for b in val)
+    elif isinstance(val, str):
+        return normalize_mac(val)
+    return None
+
+
+def get_device_fdb_table(
+    ip: str,
+    community: str = "public",
+    port: int = 161,
+    version: str = "v2c",
+    timeout: float = 1.0,
+) -> List[Dict[str, Any]]:
+    """Walk Bridge-MIB dot1dTpFdbTable (1.3.6.1.2.1.17.4.3.1.2) and return learned MAC -> Port mappings."""
+    # 1. Walk local port mapping
+    loc_ports_raw = snmp_walk(ip, community, OID_IF_DESCR, port, version, timeout, max_entries=100)
+    if not loc_ports_raw:
+        loc_ports_raw = snmp_walk(ip, community, OID_IF_NAME, port, version, timeout, max_entries=100)
+
+    loc_ports: Dict[int, str] = {}
+    for oid, val in loc_ports_raw.items():
+        try:
+            idx = int(oid.strip(".").split(".")[-1])
+            loc_ports[idx] = _decode_bytes_str(val)
+        except Exception:
+            pass
+
+    # 2. Bridge port to ifIndex mapping (1.3.6.1.2.1.17.1.4.1.2)
+    bp_to_if: Dict[int, int] = {}
+    bp_raw = snmp_walk(ip, community, OID_DOT1D_BASE_PORT_IF_INDEX, port, version, timeout, max_entries=100)
+    for oid, val in bp_raw.items():
+        try:
+            b_port = int(oid.strip(".").split(".")[-1])
+            if isinstance(val, int):
+                bp_to_if[b_port] = val
+        except Exception:
+            pass
+
+    # 3. FDB Port table (1.3.6.1.2.1.17.4.3.1.2)
+    fdb_raw = snmp_walk(ip, community, OID_DOT1D_TP_FDB_PORT, port, version, timeout, max_entries=500)
+    # 4. FDB Status (1.3.6.1.2.1.17.4.3.1.3): 3=learned, 4=self, 5=mgmt
+    status_raw = snmp_walk(ip, community, OID_DOT1D_TP_FDB_STATUS, port, version, timeout, max_entries=500)
+
+    entries = []
+    for oid, port_val in fdb_raw.items():
+        parts = oid.strip(".").split(".")
+        if len(parts) < 6:
+            continue
+        try:
+            mac_decimals = [int(p) for p in parts[-6:]]
+            mac_str = ":".join(f"{b:02X}" for b in mac_decimals)
+        except Exception:
+            continue
+
+        # Ignore broadcast / multicast
+        if mac_str.startswith("01:00:5E") or mac_str.startswith("33:33") or mac_str == "FF:FF:FF:FF:FF:FF":
+            continue
+
+        status_oid = f"{OID_DOT1D_TP_FDB_STATUS}.{'.'.join(parts[-6:])}"
+        if status_raw.get(status_oid) in (4, 5):  # self / management address
+            continue
+
+        bridge_port = int(port_val) if isinstance(port_val, int) else None
+        if not bridge_port or bridge_port <= 0:
+            continue
+
+        if_idx = bp_to_if.get(bridge_port, bridge_port)
+        port_name = loc_ports.get(if_idx) or loc_ports.get(bridge_port) or f"Port {bridge_port}"
+
+        entries.append({
+            "local_port_num": bridge_port,
+            "local_port_name": port_name,
+            "learned_mac": mac_str,
+        })
+
+    return entries
+
+
 def discover_all_lldp_topology(db: Session) -> Dict[str, Any]:
-    """Scan all manageable switches in DB, discover LLDP neighbor links, and match with devices."""
+    """Scan all manageable switches in DB via LLDP and Bridge-MIB FDB, discovering physical topology."""
     switches = (
         db.scalars(
             select(Device).where(
@@ -284,6 +377,26 @@ def discover_all_lldp_topology(db: Session) -> Dict[str, Any]:
     )
 
     all_devices = db.scalars(select(Device)).all()
+
+    # Pre-fetch Base MAC for switches if missing
+    for sw in switches:
+        if not sw.mac_address and sw.ip_address:
+            try:
+                base_mac = get_switch_base_mac(
+                    sw.ip_address,
+                    sw.snmp_community or "public",
+                    sw.snmp_port or 161,
+                    sw.snmp_version or "v2c",
+                )
+                if base_mac:
+                    sw.mac_address = base_mac
+            except Exception:
+                pass
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+
     device_dicts = [
         {
             "id": d.id,
@@ -297,6 +410,13 @@ def discover_all_lldp_topology(db: Session) -> Dict[str, Any]:
         for d in all_devices
     ]
 
+    mac_to_device = {}
+    for d in device_dicts:
+        if d.get("mac_address"):
+            norm = normalize_mac(d["mac_address"])
+            if norm:
+                mac_to_device[norm] = d
+
     raw_observations = []
     unmatched_neighbors = []
 
@@ -305,41 +425,86 @@ def discover_all_lldp_topology(db: Session) -> Dict[str, Any]:
             comm = sw.snmp_community or "public"
             port = sw.snmp_port or 161
             ver = sw.snmp_version or "v2c"
+
+            # 1. Try Standard LLDP first
             neighbors = get_device_lldp_neighbors(sw.ip_address, comm, port, ver)
 
-            for n in neighbors:
-                matched = match_remote_device(
-                    remote_man_ip=n.get("remote_man_ip"),
-                    remote_chassis_id=n.get("remote_chassis_id"),
-                    remote_sys_name=n.get("remote_sys_name"),
-                    devices=device_dicts,
-                )
+            # 2. If no LLDP neighbors (e.g. whitebox / TP-Link switches), fallback to Bridge FDB MAC table
+            if not neighbors:
+                fdb_table = get_device_fdb_table(sw.ip_address, comm, port, ver)
+                # Group learned MACs by port
+                port_macs: Dict[str, List[str]] = {}
+                for entry in fdb_table:
+                    port_macs.setdefault(entry["local_port_name"], []).append(entry["learned_mac"])
 
-                if matched:
-                    raw_observations.append(
-                        {
-                            "local_device_id": sw.id,
-                            "local_device_name": sw.name,
-                            "local_port": n["local_port_name"],
-                            "remote_device_id": matched["id"],
-                            "remote_device_name": matched["name"],
-                            "remote_port": n["remote_port_id"],
-                            "remote_chassis_id": n.get("remote_chassis_id"),
-                            "remote_sys_name": n.get("remote_sys_name"),
-                        }
+                for p_name, macs in port_macs.items():
+                    matched_on_port = False
+                    for m in macs:
+                        norm_m = normalize_mac(m)
+                        if norm_m and norm_m in mac_to_device:
+                            matched_dev = mac_to_device[norm_m]
+                            if matched_dev["id"] != sw.id:
+                                raw_observations.append({
+                                    "local_device_id": sw.id,
+                                    "local_device_name": sw.name,
+                                    "local_port": p_name,
+                                    "remote_device_id": matched_dev["id"],
+                                    "remote_device_name": matched_dev["name"],
+                                    "remote_port": None,
+                                    "remote_chassis_id": norm_m,
+                                    "remote_sys_name": matched_dev["name"],
+                                })
+                                matched_on_port = True
+                                break
+                    if not matched_on_port:
+                        # Report unmatched external device if single/few MACs on port (likely direct connection)
+                        for m in macs[:3]:
+                            norm_m = normalize_mac(m)
+                            if norm_m:
+                                vendor = lookup_vendor(norm_m)
+                                unmatched_neighbors.append({
+                                    "collector_device_id": sw.id,
+                                    "collector_device_name": sw.name,
+                                    "local_port": p_name,
+                                    "remote_chassis_id": norm_m,
+                                    "remote_port": "-",
+                                    "remote_sys_name": vendor if vendor != "未知厂商" else "-",
+                                    "remote_man_ip": None,
+                                })
+            else:
+                for n in neighbors:
+                    matched = match_remote_device(
+                        remote_man_ip=n.get("remote_man_ip"),
+                        remote_chassis_id=n.get("remote_chassis_id"),
+                        remote_sys_name=n.get("remote_sys_name"),
+                        devices=device_dicts,
                     )
-                else:
-                    unmatched_neighbors.append(
-                        {
-                            "collector_device_id": sw.id,
-                            "collector_device_name": sw.name,
-                            "local_port": n["local_port_name"],
-                            "remote_chassis_id": n.get("remote_chassis_id"),
-                            "remote_port": n["remote_port_id"],
-                            "remote_sys_name": n.get("remote_sys_name"),
-                            "remote_man_ip": n.get("remote_man_ip"),
-                        }
-                    )
+
+                    if matched:
+                        raw_observations.append(
+                            {
+                                "local_device_id": sw.id,
+                                "local_device_name": sw.name,
+                                "local_port": n["local_port_name"],
+                                "remote_device_id": matched["id"],
+                                "remote_device_name": matched["name"],
+                                "remote_port": n["remote_port_id"],
+                                "remote_chassis_id": n.get("remote_chassis_id"),
+                                "remote_sys_name": n.get("remote_sys_name"),
+                            }
+                        )
+                    else:
+                        unmatched_neighbors.append(
+                            {
+                                "collector_device_id": sw.id,
+                                "collector_device_name": sw.name,
+                                "local_port": n["local_port_name"],
+                                "remote_chassis_id": n.get("remote_chassis_id"),
+                                "remote_port": n["remote_port_id"],
+                                "remote_sys_name": n.get("remote_sys_name"),
+                                "remote_man_ip": n.get("remote_man_ip"),
+                            }
+                        )
         except Exception:
             pass
 
@@ -408,3 +573,123 @@ def apply_lldp_topology(
 
     db.commit()
     return {"status": "ok", "applied_count": applied_count}
+
+
+def diag_lldp_connection(
+    ip: str,
+    community: str = "public",
+    port: int = 161,
+    version: str = "v2c",
+    timeout: float = 1.5,
+) -> Dict[str, Any]:
+    """Diagnose SNMP, LLDP, and CDP connectivity for a specific switch with raw details."""
+    report: Dict[str, Any] = {
+        "target_ip": ip,
+        "community": community,
+        "port": port,
+        "version": version,
+        "basic_snmp_ok": False,
+        "basic_snmp_sample": {},
+        "raw_lldp_response": {},
+        "lldp_neighbors_count": 0,
+        "lldp_neighbors": [],
+        "cdp_neighbors_count": 0,
+        "cdp_neighbors": [],
+        "diagnosis_tips": [],
+    }
+
+    import socket
+    from app.services.snmp import (
+        build_snmp_getnext_packet,
+        decode_asn1,
+        snmp_walk,
+        OID_IF_DESCR,
+        OID_IF_NAME,
+        OID_LLDP_REM_CHASSIS_ID,
+        OID_LLDP_LOC_PORT_DESC,
+    )
+
+    # 1. Test basic SNMP (IF-MIB)
+    try:
+        descrs = snmp_walk(ip, community, OID_IF_DESCR, port, version, timeout=timeout, max_entries=5)
+        if not descrs:
+            descrs = snmp_walk(ip, community, OID_IF_NAME, port, version, timeout=timeout, max_entries=5)
+
+        if descrs:
+            report["basic_snmp_ok"] = True
+            report["basic_snmp_sample"] = {k: _decode_bytes_str(v) for k, v in list(descrs.items())[:3]}
+        else:
+            report["diagnosis_tips"].append(
+                "基础 SNMP (IF-MIB) 无响应。请检查：1. 交换机 SNMP 团体字是否正确；2. 交换机是否允许服务器 IP 访问 UDP 161 端口。"
+            )
+    except Exception as e:
+        report["diagnosis_tips"].append(f"基础 SNMP 测试异常: {str(e)}")
+
+    # 2. Raw GetNext against OID_LLDP_REM_CHASSIS_ID (1.0.8802.1.1.2.1.4.1.1.5)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(timeout)
+    raw_info = {"status": "timeout_or_error", "returned_oid": None, "returned_tag": None, "raw_val": None}
+    try:
+        req_pkt = build_snmp_getnext_packet(community, OID_LLDP_REM_CHASSIS_ID, request_id=888, version=version)
+        sock.sendto(req_pkt, (ip, port))
+        data, _ = sock.recvfrom(4096)
+        _, msg_el, _ = decode_asn1(data)
+        if isinstance(msg_el, list) and len(msg_el) >= 3:
+            pdu_el = msg_el[2]
+            if isinstance(pdu_el, list) and len(pdu_el) >= 4:
+                varbinds = pdu_el[3]
+                if isinstance(varbinds, list) and varbinds:
+                    first_vb = varbinds[0]
+                    if isinstance(first_vb, list) and len(first_vb) >= 2:
+                        ret_oid = first_vb[0]
+                        ret_val = first_vb[1]
+                        raw_info["status"] = "received"
+                        raw_info["returned_oid"] = str(ret_oid)
+                        raw_info["raw_val"] = repr(ret_val)
+
+                        if ret_oid.startswith("1.0.8802."):
+                            raw_info["is_lldp_tree"] = True
+                        else:
+                            raw_info["is_lldp_tree"] = False
+                            report["diagnosis_tips"].append(
+                                f"交换机对 1.0.8802 请求返回了下一个 OID: {ret_oid}（跳过了 LLDP 树）！"
+                                "根本原因：交换机 SNMP MIB-View 视图限制了仅允许 1.3.6.1（internet），未包含 1.0.8802 或 iso！"
+                                "请在交换机 Web 界面 SNMP 设置中，将 MIB View 切换为 'all' 或在命令行配置包含 iso / 1.0.8802。"
+                            )
+    except socket.timeout:
+        raw_info["status"] = "timeout"
+        report["diagnosis_tips"].append(
+            "针对 1.0.8802 LLDP OID 发送请求超时。可能是交换机未向该 SNMP 团体字开放该 MIB 树或未开启 LLDP。"
+        )
+    except Exception as e:
+        raw_info["error"] = str(e)
+    finally:
+        sock.close()
+    report["raw_lldp_response"] = raw_info
+
+    # 3. Full LLDP parsing
+    try:
+        neighbors = get_device_lldp_neighbors(ip, community, port, version, timeout=timeout)
+        report["lldp_neighbors_count"] = len(neighbors)
+        report["lldp_neighbors"] = neighbors
+        if not neighbors and report["basic_snmp_ok"] and raw_info.get("is_lldp_tree"):
+            report["diagnosis_tips"].append(
+                "交换机支持 LLDP-MIB，但当前没有邻居条目。请确认下级连接的交换机/AP 是否也已开启 LLDP。"
+            )
+    except Exception as e:
+        report["diagnosis_tips"].append(f"LLDP 完整解析异常: {str(e)}")
+
+    # 4. Check Cisco CDP
+    try:
+        cdp_devs = snmp_walk(ip, community, "1.3.6.1.4.1.9.9.23.1.2.1.1.6", port, version, timeout=timeout, max_entries=20)
+        report["cdp_neighbors_count"] = len(cdp_devs)
+        report["cdp_neighbors"] = [_decode_bytes_str(v) for v in cdp_devs.values()]
+        if cdp_devs:
+            report["diagnosis_tips"].append(
+                f"检测到交换机存在 {len(cdp_devs)} 个 Cisco CDP 邻居。如果交换机支持，建议也开启 LLDP 协议。"
+            )
+    except Exception:
+        pass
+
+    return report
+

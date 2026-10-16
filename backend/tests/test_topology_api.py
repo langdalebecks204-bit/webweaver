@@ -57,3 +57,19 @@ def test_apply_lldp_endpoint(client, admin_headers):
     data = r.json()
     assert data["status"] == "ok"
     assert data["applied_count"] == 2
+
+
+def test_diag_endpoint(client, admin_headers):
+    with patch("app.services.lldp.diag_lldp_connection") as mock_diag:
+        mock_diag.return_value = {
+            "target_ip": "172.16.2.26",
+            "basic_snmp_ok": True,
+            "lldp_neighbors_count": 0,
+            "diagnosis_tips": ["测试诊断提示"],
+        }
+        r = client.get("/api/topology/diag?ip=172.16.2.26", headers=admin_headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["target_ip"] == "172.16.2.26"
+        assert data["basic_snmp_ok"] is True
+

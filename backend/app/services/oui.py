@@ -68,6 +68,7 @@ OUI_VENDOR_MAP = {
     "D46E0E": "TP-Link",
     "DC56E7": "TP-Link",
     # Hikvision
+    "849459": "Hikvision",
     "4419B6": "Hikvision",
     "BC5451": "Hikvision",
     "C42F90": "Hikvision",
@@ -77,6 +78,11 @@ OUI_VENDOR_MAP = {
     "A41437": "Hikvision",
     "C056E3": "Hikvision",
     "DCB72E": "Hikvision",
+    # MikroTik
+    "60BEB4": "MikroTik",
+    "488F5A": "MikroTik",
+    "B869F4": "MikroTik",
+    "CC2DE0": "MikroTik",
     # Dahua
     "3CEF8C": "Dahua",
     "4C11BF": "Dahua",
