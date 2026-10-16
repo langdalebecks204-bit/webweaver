@@ -33,6 +33,7 @@ def device_to_dict(d: Device) -> dict:
         "name": d.name,
         "type": d.type,
         "ip_address": d.ip_address,
+        "mac_address": d.mac_address,
         "port": d.port,
         "location": d.location,
         "image_url": d.image_url,

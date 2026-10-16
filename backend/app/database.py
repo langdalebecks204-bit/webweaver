@@ -41,6 +41,7 @@ _DEVICE_ADDED_COLUMNS = {
     "snmp_community": "VARCHAR(50)",
     "snmp_version": "VARCHAR(10)",
     "snmp_port": "INTEGER",
+    "mac_address": "VARCHAR(50)",
 }
 
 

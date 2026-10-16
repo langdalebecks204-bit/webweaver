@@ -538,3 +538,78 @@ def test_backup_history_downsampling_rules(client, admin_headers):
         assert mid_online["latency_ms"] == 20
         assert mid_online["checked_at"].endswith(":00:00")
         assert mid_offline["latency_ms"] is None
+
+
+def test_export_and_import_with_mac_and_port_bindings(client, admin_headers):
+    # 1. Create two devices with mac and port binding
+    sw1 = client.post(
+        "/api/devices",
+        headers=admin_headers,
+        json={
+            "name": "Core-SW",
+            "type": "switch",
+            "ip_address": "192.168.1.1",
+            "mac_address": "00:11:22:33:44:55",
+            "port_count": 24,
+        },
+    ).json()
+
+    sw2 = client.post(
+        "/api/devices",
+        headers=admin_headers,
+        json={
+            "name": "Access-SW",
+            "type": "switch",
+            "ip_address": "192.168.1.2",
+            "mac_address": "AA:BB:CC:DD:EE:FF",
+            "port_count": 24,
+        },
+    ).json()
+
+    # Bind port 1 of Core-SW to port 24 of Access-SW
+    client.put(
+        f"/api/devices/{sw1['id']}",
+        headers=admin_headers,
+        json={
+            "port_bindings": {
+                "1": {
+                    "target_id": sw2["id"],
+                    "target_port": 24,
+                    "source_port_name": "GE0/0/1",
+                    "target_port_name": "GE0/0/24",
+                }
+            }
+        },
+    )
+
+    # 2. Export backup
+    r_export = client.get("/api/backup/export", headers=admin_headers)
+    assert r_export.status_code == 200
+
+    from app.services.backup_service import _parse_import_bytes
+    data, _ = _parse_import_bytes(r_export.content)
+    dev_map = {d["name"]: d for d in data.get("devices", [])}
+
+    assert "Core-SW" in dev_map
+    assert dev_map["Core-SW"]["mac_address"] == "00:11:22:33:44:55"
+    assert dev_map["Core-SW"]["port_bindings"]["1"]["source_port_name"] == "GE0/0/1"
+
+    # 3. Import replace
+    r_import = client.post(
+        "/api/backup/import?mode=replace",
+        headers={**admin_headers, "Content-Type": "application/zip"},
+        content=r_export.content,
+    )
+    assert r_import.status_code == 200
+
+    # 4. Verify devices restored and target_id accurately remapped
+    tree = client.get("/api/devices/tree", headers=admin_headers).json()
+    new_sw1 = next(d for d in tree if d["name"] == "Core-SW")
+    new_sw2 = next(d for d in tree if d["name"] == "Access-SW")
+
+    assert new_sw1["mac_address"] == "00:11:22:33:44:55"
+    assert new_sw2["mac_address"] == "AA:BB:CC:DD:EE:FF"
+    binding = new_sw1["port_bindings"]["1"]
+    assert binding["target_id"] == new_sw2["id"]
+    assert binding["source_port_name"] == "GE0/0/1"
+    assert binding["target_port_name"] == "GE0/0/24"

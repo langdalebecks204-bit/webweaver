@@ -5,9 +5,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class PortBinding(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     target_id: int | None = None
     type: Literal["uplink", "downlink"] = "downlink"
     description: str | None = None
+    speed_mbps: int | None = None
 
 
 class LoginRequest(BaseModel):
@@ -33,6 +36,7 @@ class DeviceBase(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     type: str = Field(default="group", min_length=1, max_length=20)
     ip_address: str | None = None
+    mac_address: str | None = None
     port: int | None = Field(default=None, ge=1, le=65535)
     location: str | None = Field(default=None, max_length=100)
     port_count: int | None = Field(default=None, ge=1, le=48)
@@ -53,6 +57,7 @@ class DeviceUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     type: str | None = Field(default=None, min_length=1, max_length=20)
     ip_address: str | None = None
+    mac_address: str | None = None
     port: int | None = Field(default=None, ge=1, le=65535)
     location: str | None = Field(default=None, max_length=100)
     port_count: int | None = Field(default=None, ge=1, le=48)

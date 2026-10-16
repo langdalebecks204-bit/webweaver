@@ -330,3 +330,33 @@ def test_switch_port_bindings_with_description(client, admin_headers):
     assert sw["port_bindings"]["1"]["target_id"] == target["id"]
     assert sw["port_bindings"]["2"]["description"] == "Printer Standalone"
     assert sw["port_bindings"]["2"]["target_id"] is None
+
+
+def test_device_mac_address_crud(client, admin_headers):
+    # Create device with MAC address
+    r = client.post(
+        "/api/devices",
+        headers=admin_headers,
+        json={
+            "name": "Camera-01",
+            "type": "camera",
+            "ip_address": "192.168.1.120",
+            "mac_address": "00:11:22:33:44:55",
+        },
+    )
+    assert r.status_code == 201
+    dev = r.json()
+    assert dev["mac_address"] == "00:11:22:33:44:55"
+
+    # Update MAC address
+    upd = client.put(
+        f"/api/devices/{dev['id']}",
+        headers=admin_headers,
+        json={"mac_address": "AA:BB:CC:DD:EE:FF"},
+    )
+    assert upd.status_code == 200
+    assert upd.json()["mac_address"] == "AA:BB:CC:DD:EE:FF"
+
+    # Fetch device
+    got = client.get(f"/api/devices/{dev['id']}", headers=admin_headers)
+    assert got.json()["mac_address"] == "AA:BB:CC:DD:EE:FF"

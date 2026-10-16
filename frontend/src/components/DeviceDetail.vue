@@ -136,6 +136,7 @@ async function onRemoveImage() {
         <ul class="info">
           <li><span class="k">类型</span>{{ typeLabel(props.device.type) }}</li>
           <li><span class="k">IP 地址</span>{{ props.device.ip_address || '-' }}</li>
+          <li><span class="k">MAC 地址</span><span style="font-family: monospace">{{ props.device.mac_address || '-' }}</span></li>
           <li><span class="k">端口</span>{{ props.device.port ?? '-' }}</li>
           <li><span class="k">位置</span>{{ props.device.location || '-' }}</li>
           <li><span class="k">状态</span>{{ props.device.status }}</li>

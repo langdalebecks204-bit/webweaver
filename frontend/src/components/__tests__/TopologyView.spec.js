@@ -61,6 +61,8 @@ describe('TopologyView', () => {
       nodeRelSize: vi.fn(() => fgMock),
       nodeCanvasObjectMode: vi.fn(() => fgMock),
       nodeCanvasObject: vi.fn(() => fgMock),
+      linkCanvasObjectMode: vi.fn(() => fgMock),
+      linkCanvasObject: vi.fn(() => fgMock),
       linkColor: vi.fn(() => fgMock),
       linkDirectionalParticles: vi.fn(() => fgMock),
       linkDirectionalParticleSpeed: vi.fn(() => fgMock),
@@ -89,7 +91,7 @@ describe('TopologyView', () => {
 
   it('挂载时创建图谱并设置数据与特效', async () => {
     wrapper = mount(TopologyView, {
-      global: { stubs: { ElSlider: true, ElSwitch: true } },
+      global: { stubs: { ElSlider: true, ElSwitch: true, LldpDiscoveryModal: true } },
     })
     await flushPromises()
     expect(createMock).toHaveBeenCalledTimes(1)
@@ -107,7 +109,7 @@ describe('TopologyView', () => {
   it('空树时显示空态提示且不创建图谱', async () => {
     treeMock.splice(0, treeMock.length)
     wrapper = mount(TopologyView, {
-      global: { stubs: { ElSlider: true, ElSwitch: true } },
+      global: { stubs: { ElSlider: true, ElSwitch: true, LldpDiscoveryModal: true } },
     })
     await flushPromises()
     expect(wrapper.text()).toContain('暂无设备')
@@ -117,7 +119,7 @@ describe('TopologyView', () => {
   it('数据异步加载完成后创建图谱', async () => {
     treeMock.splice(0, treeMock.length)
     wrapper = mount(TopologyView, {
-      global: { stubs: { ElSlider: true, ElSwitch: true } },
+      global: { stubs: { ElSlider: true, ElSwitch: true, LldpDiscoveryModal: true } },
     })
     await flushPromises()
     expect(createMock).not.toHaveBeenCalled()
@@ -138,7 +140,7 @@ describe('TopologyView', () => {
 
   it('标签字号可调整且影响绘制', async () => {
     wrapper = mount(TopologyView, {
-      global: { stubs: { ElSlider: true, ElSwitch: true } },
+      global: { stubs: { ElSlider: true, ElSwitch: true, LldpDiscoveryModal: true } },
     })
     await flushPromises()
     const draw = fgMock.nodeCanvasObject.mock.calls[0][0]
@@ -157,7 +159,7 @@ describe('TopologyView', () => {
 
   it('隐藏标签时非悬停节点不显示文字，悬停节点仍显示', async () => {
     wrapper = mount(TopologyView, {
-      global: { stubs: { ElSlider: true, ElSwitch: true } },
+      global: { stubs: { ElSlider: true, ElSwitch: true, LldpDiscoveryModal: true } },
     })
     await flushPromises()
     const draw = fgMock.nodeCanvasObject.mock.calls[0][0]
@@ -175,7 +177,7 @@ describe('TopologyView', () => {
 
   it('拓扑图页渲染字号滑块与显示标签开关', async () => {
     wrapper = mount(TopologyView, {
-      global: { stubs: { ElSlider: true, ElSwitch: true } },
+      global: { stubs: { ElSlider: true, ElSwitch: true, LldpDiscoveryModal: true } },
     })
     await flushPromises()
     expect(wrapper.find('.topo-toolbar').exists()).toBe(true)
@@ -198,7 +200,7 @@ describe('TopologyView', () => {
     }
     try {
       wrapper = mount(TopologyView, {
-        global: { stubs: { ElSlider: true, ElSwitch: true } },
+        global: { stubs: { ElSlider: true, ElSwitch: true, LldpDiscoveryModal: true } },
       })
       await flushPromises()
       expect(createMock).toHaveBeenCalledTimes(1)
@@ -216,7 +218,7 @@ describe('TopologyView', () => {
 
   it('悬停节点不重置图数据', async () => {
     wrapper = mount(TopologyView, {
-      global: { stubs: { ElSlider: true, ElSwitch: true } },
+      global: { stubs: { ElSlider: true, ElSwitch: true, LldpDiscoveryModal: true } },
     })
     await flushPromises()
     const before = fgMock.graphData.mock.calls.length
@@ -237,7 +239,7 @@ describe('TopologyView', () => {
       children: [],
     })
     wrapper = mount(TopologyView, {
-      global: { stubs: { ElSlider: true, ElSwitch: true } },
+      global: { stubs: { ElSlider: true, ElSwitch: true, LldpDiscoveryModal: true } },
     })
     await flushPromises()
     const first = fgMock.graphData.mock.calls[0][0]
@@ -253,7 +255,7 @@ describe('TopologyView', () => {
 
   it('节点为大圆点并居中绘制类型图标', async () => {
     wrapper = mount(TopologyView, {
-      global: { stubs: { ElSlider: true, ElSwitch: true } },
+      global: { stubs: { ElSlider: true, ElSwitch: true, LldpDiscoveryModal: true } },
     })
     await flushPromises()
     const draw = fgMock.nodeCanvasObject.mock.calls[0][0]
@@ -279,7 +281,7 @@ describe('TopologyView', () => {
 
   it('点击全屏按钮请求全屏，进入全屏后显示返回主页链接', async () => {
     wrapper = mount(TopologyView, {
-      global: { stubs: { ElSlider: true, ElSwitch: true } },
+      global: { stubs: { ElSlider: true, ElSwitch: true, LldpDiscoveryModal: true } },
     })
     await flushPromises()
     const wrapEl = wrapper.find('.topology-wrap').element
@@ -303,7 +305,7 @@ describe('TopologyView', () => {
 
   it('返回主页退出全屏并向外发出 back-home', async () => {
     wrapper = mount(TopologyView, {
-      global: { stubs: { ElSlider: true, ElSwitch: true } },
+      global: { stubs: { ElSlider: true, ElSwitch: true, LldpDiscoveryModal: true } },
     })
     await flushPromises()
     const wrapEl = wrapper.find('.topology-wrap').element
@@ -322,7 +324,7 @@ describe('TopologyView', () => {
 
   it('正确将万兆、2.5G、千兆、百兆、离线与未知映射为对应链路颜色', async () => {
     wrapper = mount(TopologyView, {
-      global: { stubs: { ElSlider: true, ElSwitch: true, ElButton: true } },
+      global: { stubs: { ElSlider: true, ElSwitch: true, ElButton: true, LldpDiscoveryModal: true } },
     })
     await flushPromises()
 
@@ -333,5 +335,30 @@ describe('TopologyView', () => {
     expect(linkColorFn({ status: 'online', speed_mbps: 1000 })).toBe('#10b981')
     expect(linkColorFn({ status: 'online', speed_mbps: 100 })).toBe('#f97316')
     expect(linkColorFn({ status: 'online', speed_mbps: 0 })).toBe('#94a3b8')
+  })
+
+  it('点击 LLDP 拓扑探测按钮打开发现对话框', async () => {
+    wrapper = mount(TopologyView, {
+      global: {
+        stubs: {
+          ElSlider: true,
+          ElSwitch: true,
+          ElButton: {
+            template: '<button @click="$emit(\'click\')"><slot /></button>',
+          },
+          LldpDiscoveryModal: {
+            props: ['modelValue'],
+            template: '<div v-if="modelValue" class="lldp-modal-stub" />',
+          },
+        },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('.lldp-modal-stub').exists()).toBe(false)
+    const lldpBtn = wrapper.findAll('button').find((b) => b.text().includes('LLDP'))
+    expect(lldpBtn).toBeTruthy()
+    await lldpBtn.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.lldp-modal-stub').exists()).toBe(true)
   })
 })

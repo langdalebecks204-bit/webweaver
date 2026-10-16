@@ -176,6 +176,7 @@ def _flatten_devices(devices: list[Device]) -> list[dict]:
             "name": d.name,
             "type": d.type,
             "ip_address": d.ip_address,
+            "mac_address": d.mac_address,
             "port": d.port,
             "location": d.location,
             "port_count": d.port_count,
@@ -317,8 +318,9 @@ def _import_merge(
 
 def _import_devices(
     db: Session, items: list[dict], merge: bool, images: dict[str, bytes]
-) -> None:
+) -> dict[int, int]:
     id_map: dict[int, int] = {}
+    created_devices: list[tuple[Device, dict]] = []
     for item in items:
         name = (item.get("name") or "").strip()
         if not name:
@@ -338,6 +340,7 @@ def _import_devices(
             name=name,
             type=dev_type,
             ip_address=item.get("ip_address"),
+            mac_address=item.get("mac_address"),
             port=item.get("port"),
             location=item.get("location"),
             port_count=item.get("port_count"),
@@ -353,7 +356,30 @@ def _import_devices(
         db.add(device)
         db.flush()
         id_map[item["id"]] = device.id
+        created_devices.append((device, item))
         _restore_image(device, item.get("image_file"), images)
+
+    # Remap target_id / target_device_id in port_bindings to new generated device IDs
+    for device, item in created_devices:
+        bindings = item.get("port_bindings")
+        if isinstance(bindings, dict):
+            new_bindings = {}
+            for port_idx, b_info in bindings.items():
+                if isinstance(b_info, dict):
+                    b_copy = dict(b_info)
+                    old_target = b_copy.get("target_id") or b_copy.get("target_device_id")
+                    if old_target in id_map:
+                        new_target = id_map[old_target]
+                        if "target_id" in b_copy:
+                            b_copy["target_id"] = new_target
+                        if "target_device_id" in b_copy:
+                            b_copy["target_device_id"] = new_target
+                    new_bindings[port_idx] = b_copy
+                else:
+                    new_bindings[port_idx] = b_info
+            device.port_bindings = new_bindings
+    db.flush()
+
     return id_map
 
 

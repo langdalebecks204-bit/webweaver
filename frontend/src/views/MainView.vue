@@ -16,6 +16,7 @@ import DeviceHistory from '../components/DeviceHistory.vue'
 import TopologyView from '../components/TopologyView.vue'
 import PortBindingDialog from '../components/PortBindingDialog.vue'
 import SwitchPortsModal from '../components/SwitchPortsModal.vue'
+import AssetsPanel from '../components/AssetsPanel.vue'
 import { allTypeOptions, typeLabel } from '../utils/deviceTypes'
 import { flattenTree } from '../stores/devicesHelpers'
 
@@ -37,7 +38,7 @@ const targetForm = ref({ name: '', ip_address: '', domain: '', port: null })
 const deviceDialogVisible = ref(false)
 const deviceSubmitting = ref(false)
 const deviceEditing = ref(null)
-const deviceForm = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, snmp_enabled: true, snmp_community: 'public', snmp_version: 'v2c', snmp_port: 161 })
+const deviceForm = ref({ name: '', type: 'group', ip_address: '', mac_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, snmp_enabled: true, snmp_community: 'public', snmp_version: 'v2c', snmp_port: 161 })
 const deviceCandidates = ref([])
 const portDialogVisible = ref(false)
 const portChildDevices = ref([])
@@ -276,6 +277,7 @@ function openDeviceEdit(device) {
     name: device.name,
     type: device.type,
     ip_address: device.ip_address || '',
+    mac_address: device.mac_address || '',
     port: device.port,
     location: device.location || '',
     port_count: device.port_count ?? null,
@@ -305,6 +307,7 @@ async function onSaveDevice() {
     ...deviceForm.value,
     parent_id: parentId,
     ip_address: deviceForm.value.ip_address || null,
+    mac_address: deviceForm.value.mac_address || null,
     port: deviceForm.value.port || null,
     location: deviceForm.value.location || null,
     port_count: deviceForm.value.port_count,
@@ -437,6 +440,11 @@ async function onSaveDevice() {
         <el-tab-pane lazy label="拓扑图" name="topology">
           <el-card><TopologyView @back-home="activeTab = 'devices'" /></el-card>
         </el-tab-pane>
+        <el-tab-pane lazy label="IP-MAC 台账" name="assets">
+          <el-card>
+            <AssetsPanel />
+          </el-card>
+        </el-tab-pane>
         <el-tab-pane label="外网" name="external">
           <el-card>
             <template #header>
@@ -546,6 +554,9 @@ async function onSaveDevice() {
           </el-form-item>
           <el-form-item label="IP 地址">
             <el-input v-model="deviceForm.ip_address" placeholder="留空表示纯分组节点" />
+          </el-form-item>
+          <el-form-item label="MAC 地址">
+            <el-input v-model="deviceForm.mac_address" placeholder="如：AA:BB:CC:DD:EE:FF（可选）" />
           </el-form-item>
           <el-form-item label="TCP 端口">
             <el-input-number v-model="deviceForm.port" :min="1" :max="65535" placeholder="可选" />

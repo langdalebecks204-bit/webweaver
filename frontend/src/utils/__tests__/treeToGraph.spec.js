@@ -37,8 +37,37 @@ describe('treeToGraph', () => {
   it('树打平为节点与链接', () => {
     const { nodes, links } = treeToGraph(tree)
     expect(nodes.map((n) => n.id).sort()).toEqual([1, 2, 3])
-    expect(links).toContainEqual({ source: 1, target: 2, status: 'online' })
-    expect(links).toContainEqual({ source: 1, target: 3, status: 'offline' })
+    expect(links).toContainEqual({ source: 1, target: 2, status: 'online', source_port: null, target_port: null })
+    expect(links).toContainEqual({ source: 1, target: 3, status: 'offline', source_port: null, target_port: null })
+  })
+
+  it('提取父子端口绑定作为连线端口号', () => {
+    const portTree = [
+      {
+        id: 1,
+        name: '核心SW',
+        type: 'switch',
+        port_count: 24,
+        port_bindings: {
+          '1': { target_id: 2, type: 'downlink' },
+        },
+        children: [
+          {
+            id: 2,
+            name: '接入SW',
+            type: 'switch',
+            port_count: 24,
+            uplink_port: 24,
+            port_bindings: {},
+            children: [],
+          },
+        ],
+      },
+    ]
+    const { links } = treeToGraph(portTree)
+    expect(links.length).toBe(1)
+    expect(links[0].source_port).toBe('P1')
+    expect(links[0].target_port).toBe('P24')
   })
 
   it('分组节点状态强制 unknown 且权重随子节点数', () => {

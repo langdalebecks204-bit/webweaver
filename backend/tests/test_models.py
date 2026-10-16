@@ -39,6 +39,21 @@ def test_device_snmp_fields():
         assert saved.snmp_enabled is True
 
 
+def test_device_mac_address_field():
+    init_db()
+    with SessionLocal() as db:
+        dev = Device(
+            name="pc_terminal",
+            type="server",
+            ip_address="192.168.1.50",
+            mac_address="AA:BB:CC:DD:EE:FF",
+        )
+        db.add(dev)
+        db.commit()
+        saved = db.query(Device).filter_by(name="pc_terminal").first()
+        assert saved.mac_address == "AA:BB:CC:DD:EE:FF"
+
+
 def test_username_unique():
     init_db()
     with SessionLocal() as db:

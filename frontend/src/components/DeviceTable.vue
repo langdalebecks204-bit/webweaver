@@ -64,6 +64,7 @@ const csvColumns = [
   { key: 'type', header: '类型', format: typeLabel },
   { key: 'parentName', header: '所属分组', format: (v) => v || '' },
   { key: 'ip_address', header: 'IP', format: (v) => v || '' },
+  { key: 'mac_address', header: 'MAC', format: (v) => v || '' },
   { key: 'port', header: '端口', format: (v) => (v ?? '') },
   { key: 'location', header: '位置', format: (v) => v || '' },
   { key: 'status', header: '状态', format: statusText },
@@ -119,6 +120,11 @@ async function onExportZip() {
       </el-table-column>
       <el-table-column prop="ip_address" label="IP" width="140">
         <template #default="{ row }">{{ row.ip_address || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="mac_address" label="MAC" width="150">
+        <template #default="{ row }">
+          <span style="font-family: monospace">{{ row.mac_address || '-' }}</span>
+        </template>
       </el-table-column>
       <el-table-column prop="port" label="端口" width="80">
         <template #default="{ row }">{{ row.port ?? '-' }}</template>

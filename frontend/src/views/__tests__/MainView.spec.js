@@ -182,10 +182,11 @@ describe('MainView 拓扑图页签', () => {
     vi.clearAllMocks()
   })
 
-  it('包含拓扑图页签', async () => {
+  it('包含拓扑图页签与IP-MAC台账页签', async () => {
     const wrapper = mountView()
     await flushPromises()
     expect(wrapper.find('[data-label="拓扑图"]').exists()).toBe(true)
+    expect(wrapper.find('[data-label="IP-MAC 台账"]').exists()).toBe(true)
   })
 
   it('拓扑页返回主页切回设备页签', async () => {
@@ -216,6 +217,7 @@ function mountView() {
         UsersPanel: { template: '<div class="users-panel-stub" />' },
         BackupPanel: { template: '<div class="backup-panel-stub" />' },
         UpdatePanel: { template: '<div class="update-panel-stub" />' },
+        AssetsPanel: { template: '<div class="assets-panel-stub" />' },
         'el-radio-group': {
           props: ['modelValue'],
           emits: ['update:modelValue'],

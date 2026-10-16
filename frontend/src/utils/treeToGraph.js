@@ -32,7 +32,37 @@ export function treeToGraph(tree) {
         port_bindings: node.port_bindings || {},
       })
       if (parentId !== null) {
-        links.push({ source: parentId, target: node.id, status: node.status || 'unknown' })
+        let sourcePort = null
+        let targetPort = node.uplink_port ? `P${node.uplink_port}` : null
+
+        // Check if parent has port binding pointing to this child
+        const parentNode = nodes.find((n) => n.id === parentId)
+        if (parentNode && parentNode.port_bindings) {
+          for (const [pKey, binding] of Object.entries(parentNode.port_bindings)) {
+            if (binding && binding.target_id === node.id) {
+              sourcePort = `P${pKey}`
+              break
+            }
+          }
+        }
+
+        // Check if child has port binding pointing to parent
+        if (!targetPort && node.port_bindings) {
+          for (const [pKey, binding] of Object.entries(node.port_bindings)) {
+            if (binding && binding.target_id === parentId) {
+              targetPort = `P${pKey}`
+              break
+            }
+          }
+        }
+
+        links.push({
+          source: parentId,
+          target: node.id,
+          status: node.status || 'unknown',
+          source_port: sourcePort,
+          target_port: targetPort,
+        })
       }
       if (childCount > 0) walk(node.children, node.id)
     }

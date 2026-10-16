@@ -1,11 +1,11 @@
 {
   "name": "webweaver-frontend",
   "private": true,
-  "version": "0.5.11",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build --emptyOutDir false",
     "preview": "vite preview",
     "test": "vitest run"
   },

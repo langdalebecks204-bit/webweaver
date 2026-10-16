@@ -15,6 +15,21 @@ OID_IF_HC_IN_OCTETS = "1.3.6.1.2.1.31.1.1.1.6"
 OID_IF_HC_OUT_OCTETS = "1.3.6.1.2.1.31.1.1.1.10"
 OID_IF_HIGH_SPEED = "1.3.6.1.2.1.31.1.1.1.15"
 
+# Raw SNMP OID Constants for IP-MIB (ARP table)
+OID_IP_NET_TO_MEDIA_PHYS = "1.3.6.1.2.1.4.22.1.2"
+OID_IP_NET_TO_MEDIA_NET = "1.3.6.1.2.1.4.22.1.3"
+OID_IP_NET_TO_MEDIA_TYPE = "1.3.6.1.2.1.4.22.1.4"
+
+# Raw SNMP OID Constants for LLDP-MIB (IEEE 802.1AB)
+OID_LLDP_LOC_PORT_ID = "1.0.8802.1.1.2.1.3.7.1.3"
+OID_LLDP_LOC_PORT_DESC = "1.0.8802.1.1.2.1.3.7.1.4"
+OID_LLDP_REM_CHASSIS_ID = "1.0.8802.1.1.2.1.4.1.1.5"
+OID_LLDP_REM_PORT_ID = "1.0.8802.1.1.2.1.4.1.1.7"
+OID_LLDP_REM_PORT_DESC = "1.0.8802.1.1.2.1.4.1.1.8"
+OID_LLDP_REM_SYS_NAME = "1.0.8802.1.1.2.1.4.1.1.9"
+OID_LLDP_REM_SYS_DESC = "1.0.8802.1.1.2.1.4.1.1.10"
+OID_LLDP_REM_MAN_ADDR = "1.0.8802.1.1.2.1.4.2.1"
+
 # In-memory traffic cache: (device_id, if_index) -> (timestamp, in_bytes, out_bytes)
 _TRAFFIC_CACHE: Dict[Tuple[int, int], Tuple[float, int, int]] = {}
 
@@ -154,7 +169,15 @@ def build_snmp_getnext_packet(community: str, oid_str: str, request_id: int = 10
     return message
 
 
-def snmp_walk(ip: str, community: str, root_oid: str, port: int = 161, version: str = "v2c", timeout: float = 0.5) -> Dict[str, Any]:
+def snmp_walk(
+    ip: str,
+    community: str,
+    root_oid: str,
+    port: int = 161,
+    version: str = "v2c",
+    timeout: float = 0.5,
+    max_entries: int = 1000,
+) -> Dict[str, Any]:
     results = {}
     curr_oid = root_oid
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -193,7 +216,7 @@ def snmp_walk(ip: str, community: str, root_oid: str, port: int = 161, version: 
 
             results[returned_oid] = val
             curr_oid = returned_oid
-            if len(results) > 100 or req_id > 120:  # safety bound
+            if len(results) >= max_entries or req_id >= max_entries + 50:  # safety bound
                 break
     except Exception:
         pass

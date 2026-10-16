@@ -20,6 +20,7 @@ class Device(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     type: Mapped[str] = mapped_column(String(20), nullable=False, default="group")
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    mac_address: Mapped[str | None] = mapped_column(String(50), nullable=True)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     location: Mapped[str | None] = mapped_column(String(100), nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(255), nullable=True)

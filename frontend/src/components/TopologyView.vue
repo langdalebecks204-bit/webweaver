@@ -6,6 +6,7 @@ import { typeGlyph } from '../utils/deviceTypes'
 import { treeToGraph } from '../utils/treeToGraph'
 import { getDeviceSnmpInterfaces } from '../api/devices'
 import { SPEED_COLORS, getLinkColor } from '../utils/topologyLinks'
+import LldpDiscoveryModal from './LldpDiscoveryModal.vue'
 
 const store = useDevicesStore()
 const graphEl = ref(null)
@@ -14,6 +15,8 @@ const error = ref('')
 const hoverNodeId = ref(null)
 const labelFontSize = ref(10)
 const showLabels = ref(true)
+const showPortLabels = ref(true)
+const lldpModalVisible = ref(false)
 const isFullscreen = ref(false)
 const snmpSpeedMap = ref(new Map())
 const isSnmpLoading = ref(false)
@@ -171,6 +174,51 @@ function queueFetchSnmpLinkSpeeds() {
   }, 1000)
 }
 
+function drawLinkPortLabels(link, ctx) {
+  if (!showPortLabels.value) return
+  const s = link.source
+  const t = link.target
+  if (typeof s !== 'object' || typeof t !== 'object') return
+  if (s.x === undefined || t.x === undefined) return
+
+  const sPort = link.source_port
+  const tPort = link.target_port
+  if (!sPort && !tPort) return
+
+  ctx.save()
+  ctx.font = '9px monospace'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+
+  if (sPort) {
+    const px = s.x + (t.x - s.x) * 0.22
+    const py = s.y + (t.y - s.y) * 0.22
+    const textWidth = ctx.measureText(sPort).width
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
+    ctx.fillRect(px - textWidth / 2 - 3, py - 6, textWidth + 6, 12)
+    ctx.strokeStyle = '#38bdf8'
+    ctx.lineWidth = 0.8
+    ctx.strokeRect(px - textWidth / 2 - 3, py - 6, textWidth + 6, 12)
+    ctx.fillStyle = '#38bdf8'
+    ctx.fillText(sPort, px, py)
+  }
+
+  if (tPort) {
+    const px = s.x + (t.x - s.x) * 0.78
+    const py = s.y + (t.y - s.y) * 0.78
+    const textWidth = ctx.measureText(tPort).width
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
+    ctx.fillRect(px - textWidth / 2 - 3, py - 6, textWidth + 6, 12)
+    ctx.strokeStyle = '#34d399'
+    ctx.lineWidth = 0.8
+    ctx.strokeRect(px - textWidth / 2 - 3, py - 6, textWidth + 6, 12)
+    ctx.fillStyle = '#34d399'
+    ctx.fillText(tPort, px, py)
+  }
+
+  ctx.restore()
+}
+
 function renderGraph() {
   if (!graphEl.value || !graphData.value.nodes.length) return
   fg = new ForceGraph(graphEl.value)
@@ -179,6 +227,8 @@ function renderGraph() {
     .nodeRelSize(1)
     .nodeCanvasObjectMode(() => 'replace')
     .nodeCanvasObject(drawNode)
+    .linkCanvasObjectMode(() => 'after')
+    .linkCanvasObject(drawLinkPortLabels)
     .linkColor((link) => getLinkColor(link, snmpSpeedMap.value))
     .linkDirectionalParticles(particleCount)
     .linkDirectionalParticleSpeed(particleSpeed)
@@ -213,7 +263,13 @@ function syncGraphData() {
     }
     return { ...n }
   })
-  const links = graphData.value.links.map((l) => ({ source: l.source, target: l.target, status: l.status }))
+  const links = graphData.value.links.map((l) => ({
+    source: l.source,
+    target: l.target,
+    status: l.status,
+    source_port: l.source_port,
+    target_port: l.target_port,
+  }))
   fg.graphData({ nodes, links })
   fg.centerAt?.(0, 0, 400)
   fg.zoomToFit?.(400, 30)
@@ -278,6 +334,9 @@ onBeforeUnmount(() => {
         <span class="label">显示标签</span>
         <el-switch v-model="showLabels" />
 
+        <span class="label">显示端口</span>
+        <el-switch v-model="showPortLabels" />
+
         <div class="legend-group">
           <span class="legend-item"><span class="legend-dot offline" />离线</span>
           <span class="legend-item"><span class="legend-dot speed-100m" />百兆</span>
@@ -286,6 +345,16 @@ onBeforeUnmount(() => {
           <span class="legend-item"><span class="legend-dot speed-10000m" />万兆</span>
           <span class="legend-item"><span class="legend-dot unknown" />未知</span>
         </div>
+
+        <el-button
+          size="small"
+          type="primary"
+          plain
+          class="lldp-btn"
+          @click="lldpModalVisible = true"
+        >
+          LLDP 拓扑探测
+        </el-button>
 
         <el-button
           size="small"
@@ -304,6 +373,11 @@ onBeforeUnmount(() => {
       <div ref="graphEl" class="graph" />
     </template>
     <div v-else class="empty">暂无设备</div>
+
+    <LldpDiscoveryModal
+      v-model="lldpModalVisible"
+      @applied="queueFetchSnmpLinkSpeeds"
+    />
   </div>
 </template>
 
