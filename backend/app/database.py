@@ -42,6 +42,7 @@ _DEVICE_ADDED_COLUMNS = {
     "snmp_version": "VARCHAR(10)",
     "snmp_port": "INTEGER",
     "mac_address": "VARCHAR(50)",
+    "is_virtual": "BOOLEAN NOT NULL DEFAULT 0",
 }
 
 

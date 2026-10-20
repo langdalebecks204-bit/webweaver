@@ -48,6 +48,7 @@ def device_to_dict(d: Device) -> dict:
         "latency_ms": d.latency_ms,
         "last_check": d.last_check.replace(tzinfo=timezone.utc).isoformat()
         if d.last_check else None,
+        "is_virtual": bool(d.is_virtual),
         "order_index": d.order_index,
     }
 

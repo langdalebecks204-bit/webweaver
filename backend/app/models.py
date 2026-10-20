@@ -34,6 +34,7 @@ class Device(Base):
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="unknown")
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_check: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    is_virtual: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
