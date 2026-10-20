@@ -123,3 +123,63 @@ def test_discover_edge_topology_scenario(monkeypatch):
         assert cluster["ap_name"] == "AP-Meeting-Room"
         assert cluster["mobile_count"] >= 2
 
+
+def test_apply_edge_topology_creates_hub_and_links():
+    from app.database import SessionLocal, init_db
+    from app.models import Device
+    from app.services.fdb_edge import apply_edge_topology
+
+    init_db()
+    with SessionLocal() as db:
+        sw = Device(name="SW-Apply-Test", type="switch", port_count=24)
+        c1 = Device(name="Client-Direct", type="server")
+        c2 = Device(name="Client-Hub-1", type="server")
+        c3 = Device(name="Client-Hub-2", type="server")
+        db.add_all([sw, c1, c2, c3])
+        db.commit()
+
+        direct_terminals = [
+            {"device_id": c1.id, "switch_id": sw.id, "port_num": 3, "port_name": "GE3"}
+        ]
+        hubs_to_create = [
+            {
+                "name": "财务室桌下5口交换机",
+                "switch_id": sw.id,
+                "port_num": 8,
+                "port_name": "GE8",
+                "device_ids": [c2.id, c3.id],
+                "unregistered_macs": ["68:D7:9A:11:22:33"],
+            }
+        ]
+
+        result = apply_edge_topology(db, direct_terminals, hubs_to_create)
+        assert result["applied_direct_count"] == 1
+        assert result["created_hubs_count"] == 1
+
+        # Check c1 parent and switch port 3
+        db.refresh(c1)
+        db.refresh(sw)
+        assert c1.parent_id == sw.id
+        assert sw.port_bindings is not None
+        assert str(sw.port_bindings["3"]["target_id"]) == str(c1.id)
+
+        # Check Hub creation
+        hub = db.query(Device).filter_by(name="财务室桌下5口交换机").first()
+        assert hub is not None
+        assert hub.is_virtual is True
+        assert hub.type == "unmanaged_switch"
+        assert hub.parent_id == sw.id
+        assert str(sw.port_bindings["8"]["target_id"]) == str(hub.id)
+
+        # Check c2, c3 reparented to Hub
+        db.refresh(c2)
+        db.refresh(c3)
+        assert c2.parent_id == hub.id
+        assert c3.parent_id == hub.id
+
+        # Check unregistered device enrolled under Hub
+        unreg = db.query(Device).filter_by(mac_address="68:D7:9A:11:22:33").first()
+        assert unreg is not None
+        assert unreg.parent_id == hub.id
+
+

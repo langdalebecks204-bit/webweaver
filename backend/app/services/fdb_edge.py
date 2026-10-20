@@ -3,6 +3,7 @@ import re
 from typing import Any, Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.models import Device
 from app.services.oui import lookup_vendor, normalize_mac
@@ -241,3 +242,116 @@ def discover_edge_topology(
         "unmanaged_hubs": unmanaged_hubs,
         "ap_clusters": ap_clusters,
     }
+
+
+def apply_edge_topology(
+    db: Session,
+    direct_terminals: List[Dict[str, Any]],
+    hubs_to_create: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Apply edge topology selections into database:
+    
+    1. Direct Terminals: Update terminal parent_id to switch and bind to switch port.
+    2. Hubs to Create: Create unmanaged_switch device, link to switch port, and reparent attached devices.
+    """
+    applied_direct_count = 0
+    created_hubs_count = 0
+
+    # 1. Apply Direct Terminals
+    for dt in direct_terminals:
+        dev_id = dt.get("device_id")
+        sw_id = dt.get("switch_id")
+        port_num = dt.get("port_num")
+        if not dev_id or not sw_id or not port_num:
+            continue
+
+        dev = db.get(Device, dev_id)
+        sw = db.get(Device, sw_id)
+        if not dev or not sw:
+            continue
+
+        # Update terminal parent_id to switch
+        dev.parent_id = sw.id
+
+        # Update switch port binding if port_count exists
+        if sw.port_count and 1 <= port_num <= sw.port_count:
+            bindings = dict(sw.port_bindings or {})
+            bindings[str(port_num)] = {
+                "target_id": dev.id,
+                "target_port": None,
+                "cable_type": "copper",
+                "rate": "1000M",
+            }
+            sw.port_bindings = bindings
+            flag_modified(sw, "port_bindings")
+
+        applied_direct_count += 1
+
+    # 2. Apply Hubs
+    for hub_item in hubs_to_create:
+        sw_id = hub_item.get("switch_id")
+        port_num = hub_item.get("port_num")
+        if not sw_id or not port_num:
+            continue
+
+        sw = db.get(Device, sw_id)
+        if not sw:
+            continue
+
+        hub_name = (hub_item.get("name") or f"{sw.name}_P{port_num}_分线交换机").strip()
+        
+        # Create virtual Hub device
+        hub = Device(
+            name=hub_name,
+            type="unmanaged_switch",
+            is_virtual=True,
+            parent_id=sw.id,
+            port_count=8,  # Default 8 ports for unmanaged dumb switch
+            uplink_port=1,
+            status="online",
+        )
+        db.add(hub)
+        db.flush()  # get hub.id
+
+        # Bind switch port to this Hub
+        if sw.port_count and 1 <= port_num <= sw.port_count:
+            bindings = dict(sw.port_bindings or {})
+            bindings[str(port_num)] = {
+                "target_id": hub.id,
+                "target_port": 1,
+                "cable_type": "copper",
+                "rate": "1000M",
+            }
+            sw.port_bindings = bindings
+            flag_modified(sw, "port_bindings")
+
+        # Reparent existing devices under this Hub
+        for d_id in hub_item.get("device_ids", []):
+            attached_dev = db.get(Device, d_id)
+            if attached_dev:
+                attached_dev.parent_id = hub.id
+
+        # Enroll unregistered MACs under this Hub
+        for raw_mac in hub_item.get("unregistered_macs", []):
+            norm_mac = normalize_mac(raw_mac)
+            if not norm_mac:
+                continue
+            vendor = lookup_vendor(norm_mac)
+            new_dev = Device(
+                name=f"终端 ({vendor})" if vendor != "-" else f"未登记终端 ({norm_mac[-5:]})",
+                type="server",
+                mac_address=norm_mac,
+                parent_id=hub.id,
+                status="unknown",
+            )
+            db.add(new_dev)
+
+        created_hubs_count += 1
+
+    db.commit()
+
+    return {
+        "applied_direct_count": applied_direct_count,
+        "created_hubs_count": created_hubs_count,
+    }
+
