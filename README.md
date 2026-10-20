@@ -46,7 +46,7 @@ docker run -d --name weaver \
   --restart unless-stopped \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=请改成随机长字符串 \
-  ghcr.io/langdalebecks204-bit/webweaver:0.6.1
+  ghcr.io/langdalebecks204-bit/webweaver:0.6.2
 ```
 
 - `--net=host`：推荐网络模式，方便直接与局域网设备/交换机进行 ICMP 与 SNMP 161 端口通信（避开 Docker 虚拟网段冲突）。
@@ -103,7 +103,7 @@ sudo bash install.sh
 
 ```bash
 # 固定 tag 方式
-docker pull ghcr.io/langdalebecks204-bit/webweaver:0.6.1
+docker pull ghcr.io/langdalebecks204-bit/webweaver:0.6.2
 docker rm -f weaver
 docker run -d --name weaver \
   --net=host \
@@ -111,11 +111,27 @@ docker run -d --name weaver \
   --restart unless-stopped \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=请改成随机长字符串 \
-  ghcr.io/langdalebecks204-bit/webweaver:0.6.1
+  ghcr.io/langdalebecks204-bit/webweaver:0.6.2
 
 # 或 compose 方式
 docker compose pull
 docker compose up -d
+```
+
+#### 方式三：源码部署一键与定时自动更新（Git 模式）
+
+若你的服务器采用 `install.sh` 原生源码部署，可直接使用内置的 `update.sh` 脚本：
+
+```bash
+# 1. 手动一键拉取最新代码并热重启
+cd /opt/webweaver
+sudo bash update.sh
+
+# 2. 或一键配置 Crontab 每天凌晨 03:00 自动拉取 Git 最新代码并更新（完全无人值守）
+sudo bash update.sh --cron
+
+# 3. 移除定时自动更新任务
+sudo bash update.sh --remove-cron
 ```
 
 - 数据保存在卷 `webweaver-data:/data`，删除重建容器**不会丢数据**。

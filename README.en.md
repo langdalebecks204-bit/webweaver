@@ -46,7 +46,7 @@ docker run -d --name weaver \
   --restart unless-stopped \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=change-me-to-a-long-random-string \
-  ghcr.io/langdalebecks204-bit/webweaver:0.6.1
+  ghcr.io/langdalebecks204-bit/webweaver:0.6.2
 ```
 
 - `--net=host`: recommended network mode to allow direct ICMP and SNMP (UDP 161) communication with LAN devices/switches without Docker bridge subnet conflict.
@@ -104,7 +104,7 @@ Since `v0.5.6`, WebWeaver supports one-click differential in-place updates from 
 
 ```bash
 # Pinned tag (recommended)
-docker pull ghcr.io/langdalebecks204-bit/webweaver:0.6.1
+docker pull ghcr.io/langdalebecks204-bit/webweaver:0.6.2
 docker rm -f weaver
 docker run -d --name weaver \
   --net=host \
@@ -112,11 +112,27 @@ docker run -d --name weaver \
   --restart unless-stopped \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=change-me-to-a-long-random-string \
-  ghcr.io/langdalebecks204-bit/webweaver:0.6.1
+  ghcr.io/langdalebecks204-bit/webweaver:0.6.2
 
 # Or with compose
 docker compose pull
 docker compose up -d
+```
+
+#### Option 3: Bare-metal Git One-Click & Scheduled Auto-Update
+
+For bare-metal deployments installed via `install.sh`, you can use the built-in `update.sh`:
+
+```bash
+# 1. One-click pull latest code & restart
+cd /opt/webweaver
+sudo bash update.sh
+
+# 2. Or set up daily automated unattended updates at 03:00 AM via Crontab
+sudo bash update.sh --cron
+
+# 3. Remove automated cron updates
+sudo bash update.sh --remove-cron
 ```
 
 - Data lives in the `webweaver-data:/data` volume; removing and recreating the container does **not** lose data.
