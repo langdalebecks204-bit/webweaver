@@ -3,3 +3,35 @@ docs/
 doc/
 需求.txt
 webweaver-update.tar.gz
+
+# Data & Database
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.bak
+
+# Environment & Credentials
+.env
+backend/.env
+compose.env
+
+# Virtual Environment & Python cache
+__pycache__/
+*.py[cod]
+backend/.venv/
+.venv/
+
+# Frontend Build & Node
+frontend/node_modules/
+frontend/dist/
+
+# Uploads & Backups
+uploads/
+backend/uploads/
+data/uploads/
+backups/
+backend/backups/
