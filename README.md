@@ -182,7 +182,8 @@ npm run test
 - `GET /api/topology/diag` 单交换机 SNMP/LLDP/FDB 连通性排障诊断
 - `GET /api/assets` IP-MAC 局域网资产发现列表与 OUI 厂商解析
 - `POST /api/assets/scan` 扫描网关/交换机 ARP 表与转发表刷新在线资产
-- `POST /api/assets/{id}/import-device` 资产一键导入为设备树节点
+- `POST /api/topology/edge-discover` 边缘 CAM/FDB 终端精准直连定位与虚拟分线器聚合推导
+- `POST /api/topology/apply-edge` 应用边缘接入拓扑（直连端口绑定与自动创建虚拟 Hub）
 - `GET /api/system/update/check` 检查 GitHub 最新版本与更新包
 - `POST /api/system/update/apply` 系统一键在线平滑热更新
 

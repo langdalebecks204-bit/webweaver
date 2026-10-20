@@ -184,7 +184,8 @@ npm run test
 - `GET /api/topology/diag` — Switch SNMP/LLDP/FDB diagnostic probe
 - `GET /api/assets` — LAN IP-MAC assets discovery list with OUI vendor lookup
 - `POST /api/assets/scan` — Scan gateway ARP / switch FDB to refresh assets
-- `POST /api/assets/{id}/import-device` — Import discovered asset into device tree
+- `POST /api/topology/edge-discover` — Edge CAM/FDB direct terminal localization & unmanaged hub aggregation
+- `POST /api/topology/apply-edge` — Apply edge topology (direct port bindings & create virtual hubs)
 - `GET /api/system/update/check` — Check for updates from GitHub Release
 - `POST /api/system/update/apply` — In-place online system update
 
