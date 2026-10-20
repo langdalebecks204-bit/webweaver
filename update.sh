@@ -52,8 +52,32 @@ echo -e "目标目录: ${YELLOW}$TARGET_DIR${NC}"
 
 cd "$TARGET_DIR"
 
-# 4. 拉取 Git 最新代码
-echo -e "\n${YELLOW}[1/4] 从 GitHub 远程仓库拉取最新代码...${NC}"
+# 4. 自动备份当前数据库与配置（安全双保险）
+echo -e "\n${YELLOW}[1/5] 执行数据安全快照备份...${NC}"
+BACKUP_DIR="$TARGET_DIR/data/backups"
+mkdir -p "$BACKUP_DIR"
+
+# 优先从 .env 读取实际数据库路径，缺省使用 $TARGET_DIR/data/weaver.db
+DB_FILE="$TARGET_DIR/data/weaver.db"
+if [ -f "$TARGET_DIR/backend/.env" ]; then
+    CUSTOM_DB=$(grep -E "^WEAVER_DB_URL=" "$TARGET_DIR/backend/.env" | cut -d'=' -f2 | sed 's|sqlite:///||')
+    if [ -n "$CUSTOM_DB" ] && [ -f "$CUSTOM_DB" ]; then
+        DB_FILE="$CUSTOM_DB"
+    fi
+fi
+
+if [ -f "$DB_FILE" ]; then
+    BACKUP_NAME="weaver.db.pre_update_$(date +%Y%m%d_%H%M%S)"
+    cp "$DB_FILE" "$BACKUP_DIR/$BACKUP_NAME"
+    echo -e "${GREEN}✓ 已自动备份数据库至: $BACKUP_DIR/$BACKUP_NAME${NC}"
+    # 仅保留最近 15 份预更新备份，防止占满磁盘
+    ls -t "$BACKUP_DIR"/weaver.db.pre_update_* 2>/dev/null | tail -n +16 | xargs rm -f 2>/dev/null || true
+else
+    echo -e "${YELLOW}未发现已有数据库文件 ($DB_FILE)，跳过备份。${NC}"
+fi
+
+# 5. 拉取 Git 最新代码
+echo -e "\n${YELLOW}[2/5] 从 GitHub 远程仓库拉取最新代码...${NC}"
 git fetch --all
 BEFORE_COMMIT=$(git rev-parse HEAD)
 git reset --hard origin/main
@@ -65,8 +89,8 @@ else
     echo -e "${GREEN}代码更新成功: ${BEFORE_COMMIT:0:7} -> ${AFTER_COMMIT:0:7}${NC}"
 fi
 
-# 5. 更新后端 Python 依赖
-echo -e "\n${YELLOW}[2/4] 检查并更新后端 Python 依赖...${NC}"
+# 6. 更新后端 Python 依赖
+echo -e "\n${YELLOW}[3/5] 检查并更新后端 Python 依赖...${NC}"
 if [ -d "$TARGET_DIR/backend/.venv" ]; then
     "$TARGET_DIR/backend/.venv/bin/pip" install --upgrade pip -q
     "$TARGET_DIR/backend/.venv/bin/pip" install -r "$TARGET_DIR/backend/requirements.txt" -q
@@ -79,8 +103,8 @@ else
     echo -e "${YELLOW}未检测到 backend/.venv，跳过 pip 依赖检查。${NC}"
 fi
 
-# 6. 编译 / 更新前端静态资源
-echo -e "\n${YELLOW}[3/4] 检查前端资源...${NC}"
+# 7. 编译 / 更新前端静态资源
+echo -e "\n${YELLOW}[4/5] 检查前端资源...${NC}"
 if command -v npm >/dev/null 2>&1 && [ -d "$TARGET_DIR/frontend" ]; then
     echo -e "${BLUE}检测到 Node/npm 环境，正在构建前端 dist...${NC}"
     cd "$TARGET_DIR/frontend"
@@ -91,8 +115,8 @@ else
     echo -e "${YELLOW}未安装 Node/npm，跳过前端现场编译，保留现有静态页面。${NC}"
 fi
 
-# 7. 重启 systemd 服务
-echo -e "\n${YELLOW}[4/4] 平滑重启 WebWeaver 服务...${NC}"
+# 8. 重启 systemd 服务
+echo -e "\n${YELLOW}[5/5] 平滑重启 WebWeaver 服务...${NC}"
 if systemctl list-unit-files | grep -q "webweaver.service"; then
     systemctl daemon-reload
     systemctl restart webweaver
