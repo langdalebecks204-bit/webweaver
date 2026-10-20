@@ -10,4 +10,10 @@ export default {
       update_hierarchy: updateHierarchy,
     })
   },
+  edgeDiscover(switchIds = null) {
+    return client.post('/topology/edge-discover', { switch_ids: switchIds })
+  },
+  applyEdge(payload) {
+    return client.post('/topology/apply-edge', payload)
+  },
 }

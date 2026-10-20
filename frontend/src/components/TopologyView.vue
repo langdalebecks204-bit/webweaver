@@ -353,7 +353,7 @@ onBeforeUnmount(() => {
           class="lldp-btn"
           @click="lldpModalVisible = true"
         >
-          LLDP 拓扑探测
+          LLDP / 物理拓扑探测
         </el-button>
 
         <el-button
