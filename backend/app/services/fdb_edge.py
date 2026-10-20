@@ -1,5 +1,12 @@
+import collections
 import re
 from typing import Any, Dict, List, Optional
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import Device
+from app.services.oui import lookup_vendor, normalize_mac
+from app.services import lldp
 
 MOBILE_VENDORS = (
     "apple",
@@ -36,3 +43,201 @@ def is_mobile_oui(vendor: Optional[str]) -> bool:
         return False
     v_lower = vendor.lower()
     return any(mv in v_lower for mv in MOBILE_VENDORS)
+
+
+def discover_edge_topology(
+    db: Session, switch_ids: Optional[List[int]] = None
+) -> Dict[str, Any]:
+    """Analyze switch FDB tables to classify edge access ports:
+    
+    1. Single MAC ports -> Direct terminal links.
+    2. Multi MAC ports with wired devices -> Unmanaged Hubs (dumb switches).
+    3. Multi MAC ports with APs / randomized MACs -> AP clusters (wireless roamers).
+    """
+    all_devices = list(db.scalars(select(Device)))
+    
+    # Map normalized MAC -> Device
+    mac_to_dev: Dict[str, Device] = {}
+    core_macs: set[str] = set()
+    for d in all_devices:
+        if d.mac_address:
+            norm = normalize_mac(d.mac_address)
+            if norm:
+                mac_to_dev[norm] = d
+                if d.type in ("switch", "router"):
+                    core_macs.add(norm)
+
+    # Filter target switches
+    switches = [d for d in all_devices if d.type == "switch" and d.snmp_enabled and d.ip_address]
+    if switch_ids:
+        switches = [s for s in switches if s.id in switch_ids]
+
+    direct_terminals: List[Dict[str, Any]] = []
+    unmanaged_hubs: List[Dict[str, Any]] = []
+    ap_clusters: List[Dict[str, Any]] = []
+
+    for sw in switches:
+        # Determine skip ports (uplink or existing inter-switch links)
+        skip_ports: set[int] = set()
+        if sw.uplink_port:
+            skip_ports.add(sw.uplink_port)
+        if sw.port_bindings and isinstance(sw.port_bindings, dict):
+            for p_str, b in sw.port_bindings.items():
+                if isinstance(b, dict):
+                    t_id = b.get("target_id")
+                    if t_id:
+                        target = db.get(Device, t_id)
+                        if target and target.type in ("switch", "router"):
+                            try:
+                                skip_ports.add(int(p_str))
+                            except ValueError:
+                                pass
+
+        fdb_entries = lldp.get_device_fdb_table(
+            sw.ip_address,
+            sw.snmp_community or "public",
+            sw.snmp_port or 161,
+        )
+
+        port_map: Dict[int, List[Dict[str, Any]]] = collections.defaultdict(list)
+        port_names: Dict[int, str] = {}
+
+        for entry in fdb_entries:
+            p_num = entry.get("local_port_num")
+            raw_mac = entry.get("learned_mac")
+            if not p_num or p_num <= 0 or p_num in skip_ports or not raw_mac:
+                continue
+
+            norm_mac = normalize_mac(raw_mac)
+            if not norm_mac:
+                continue
+
+            # Skip if this port learned a core switch/router's MAC (it's a trunk/uplink port)
+            if norm_mac in core_macs:
+                skip_ports.add(p_num)
+                continue
+
+            p_name = entry.get("local_port_name") or f"Port{p_num}"
+            port_names[p_num] = p_name
+            port_map[p_num].append({
+                "mac": norm_mac,
+                "port_num": p_num,
+                "port_name": p_name,
+            })
+
+        # Process each non-skipped port
+        for p_num, entries in port_map.items():
+            if p_num in skip_ports:
+                continue
+
+            # Unique MACs on this port
+            seen_macs = set()
+            unique_entries = []
+            for e in entries:
+                if e["mac"] not in seen_macs:
+                    seen_macs.add(e["mac"])
+                    unique_entries.append(e)
+
+            if not unique_entries:
+                continue
+
+            p_name = port_names.get(p_num, f"Port{p_num}")
+
+            if len(unique_entries) == 1:
+                # Case 1: Single MAC Direct Connection
+                mac = unique_entries[0]["mac"]
+                matched_dev = mac_to_dev.get(mac)
+                vendor = lookup_vendor(mac)
+                
+                direct_terminals.append({
+                    "switch_id": sw.id,
+                    "switch_name": sw.name,
+                    "port_num": p_num,
+                    "port_name": p_name,
+                    "mac": mac,
+                    "ip_address": matched_dev.ip_address if matched_dev else None,
+                    "device_id": matched_dev.id if matched_dev else None,
+                    "device_name": matched_dev.name if matched_dev else (f"设备 ({vendor})" if vendor != "-" else "未知设备"),
+                    "matched_by": "mac" if matched_dev else "fdb_unregistered",
+                    "vendor": vendor,
+                })
+            else:
+                # Case 2: Multi MAC Port (Unmanaged Hub or Wireless AP Cluster)
+                random_count = 0
+                mobile_count = 0
+                ap_device: Optional[Device] = None
+
+                attached_devices: List[Dict[str, Any]] = []
+                unregistered_assets: List[Dict[str, Any]] = []
+
+                for ue in unique_entries:
+                    m = ue["mac"]
+                    v = lookup_vendor(m)
+                    dev = mac_to_dev.get(m)
+                    
+                    if dev and dev.type == "ap":
+                        ap_device = dev
+
+                    is_rand = is_random_mac(m)
+                    is_mob = is_mobile_oui(v)
+                    if is_rand:
+                        random_count += 1
+                    if is_mob:
+                        mobile_count += 1
+
+                    if dev:
+                        attached_devices.append({
+                            "device_id": dev.id,
+                            "name": dev.name,
+                            "mac": m,
+                            "ip": dev.ip_address,
+                            "type": dev.type,
+                            "vendor": v,
+                        })
+                    else:
+                        unregistered_assets.append({
+                            "mac": m,
+                            "ip": None,
+                            "vendor": v,
+                            "is_random_mac": is_rand,
+                        })
+
+                total_macs = len(unique_entries)
+                is_ap_scenario = (
+                    ap_device is not None
+                    or ((random_count + mobile_count) / total_macs >= 0.5)
+                )
+
+                if is_ap_scenario:
+                    # Case 2a: AP Cluster
+                    ap_clusters.append({
+                        "switch_id": sw.id,
+                        "switch_name": sw.name,
+                        "port_num": p_num,
+                        "port_name": p_name,
+                        "ap_device_id": ap_device.id if ap_device else None,
+                        "ap_name": ap_device.name if ap_device else f"无线AP (P{p_num})",
+                        "terminal_count": total_macs,
+                        "mobile_count": random_count + mobile_count,
+                        "has_random_macs": random_count > 0,
+                        "sample_macs": [ue["mac"] for ue in unique_entries[:5]],
+                    })
+                else:
+                    # Case 2b: Unmanaged Hub
+                    suggested_name = f"{sw.name}_P{p_num}_分线交换机"
+                    unmanaged_hubs.append({
+                        "switch_id": sw.id,
+                        "switch_name": sw.name,
+                        "port_num": p_num,
+                        "port_name": p_name,
+                        "suggested_name": suggested_name,
+                        "terminal_count": total_macs,
+                        "attached_devices": attached_devices,
+                        "unregistered_assets": unregistered_assets,
+                    })
+
+    return {
+        "direct_terminals": direct_terminals,
+        "unmanaged_hubs": unmanaged_hubs,
+        "ap_clusters": ap_clusters,
+    }
