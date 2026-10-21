@@ -167,6 +167,33 @@ def discover_edge_topology(
                             except ValueError:
                                 pass
 
+        # Find existing unmanaged switches (dumb switches) already connected to ports of this switch
+        existing_port_hubs: Dict[int, Device] = {}
+        if sw.port_bindings and isinstance(sw.port_bindings, dict):
+            for p_str, b in sw.port_bindings.items():
+                if isinstance(b, dict):
+                    t_id = b.get("target_id")
+                    if t_id:
+                        target = db.get(Device, t_id)
+                        if target and target.type == "unmanaged_switch":
+                            try:
+                                existing_port_hubs[int(p_str)] = target
+                            except ValueError:
+                                pass
+
+        # Also check if an unmanaged switch under this switch defines an uplink port pointing to sw
+        for unm in all_devices:
+            if unm.parent_id == sw.id and unm.type == "unmanaged_switch":
+                if unm.port_bindings and isinstance(unm.port_bindings, dict):
+                    for _, ub in unm.port_bindings.items():
+                        if isinstance(ub, dict) and ub.get("target_id") == sw.id:
+                            tp = ub.get("target_port")
+                            if tp:
+                                try:
+                                    existing_port_hubs.setdefault(int(tp), unm)
+                                except ValueError:
+                                    pass
+
         fdb_entries = lldp.get_device_fdb_table(
             sw.ip_address,
             sw.snmp_community or "public",
@@ -216,9 +243,11 @@ def discover_edge_topology(
                 continue
 
             p_name = port_names.get(p_num, f"Port{p_num}")
+            existing_hub = existing_port_hubs.get(p_num)
 
-            if len(unique_entries) == 1:
-                # Case 1: Single MAC Direct Connection
+            # If this port has NO existing unmanaged switch AND has exactly 1 MAC, it is a direct terminal
+            if existing_hub is None and len(unique_entries) == 1:
+                # Case 1: True Single MAC Direct Connection
                 mac = unique_entries[0]["mac"]
                 vendor = lookup_vendor(mac)
                 matched_dev = mac_to_dev.get(mac)
@@ -238,7 +267,7 @@ def discover_edge_topology(
                     dev_ip = matched_ip
                     dev_name = format_terminal_default_name(mac, dev_ip, vendor)
                     matched_by = "ip_mac_unregistered" if dev_ip else "fdb_unregistered"
-                
+
                 direct_terminals.append({
                     "switch_id": sw.id,
                     "switch_name": sw.name,
@@ -252,13 +281,14 @@ def discover_edge_topology(
                     "vendor": vendor,
                 })
             else:
-                # Case 2: Multi MAC Port (Unmanaged Hub or Wireless AP Cluster)
+                # Case 2: Multi MAC Port OR Port with Existing Unmanaged Switch
                 random_count = 0
                 mobile_count = 0
                 ap_device: Optional[Device] = None
 
                 attached_devices: List[Dict[str, Any]] = []
                 unregistered_assets: List[Dict[str, Any]] = []
+                seen_attached_ids: set[int] = set()
 
                 for ue in unique_entries:
                     m = ue["mac"]
@@ -267,7 +297,7 @@ def discover_edge_topology(
                     matched_ip = mac_to_ip.get(m)
                     if not dev and matched_ip:
                         dev = ip_to_dev.get(matched_ip)
-                    
+
                     if dev and dev.type == "ap":
                         ap_device = dev
 
@@ -278,15 +308,26 @@ def discover_edge_topology(
                     if is_mob:
                         mobile_count += 1
 
+                    # Skip the hub itself or upstream switches/routers
+                    if existing_hub and dev and dev.id == existing_hub.id:
+                        continue
+                    if dev and dev.type in ("switch", "router"):
+                        continue
+
                     if dev:
-                        attached_devices.append({
-                            "device_id": dev.id,
-                            "name": dev.name,
-                            "mac": m,
-                            "ip": dev.ip_address or matched_ip,
-                            "type": dev.type,
-                            "vendor": v,
-                        })
+                        if dev.id not in seen_attached_ids:
+                            seen_attached_ids.add(dev.id)
+                            attached_devices.append({
+                                "device_id": dev.id,
+                                "name": dev.name,
+                                "mac": m,
+                                "ip": dev.ip_address or matched_ip,
+                                "type": dev.type,
+                                "vendor": v,
+                                "already_under_hub": bool(
+                                    existing_hub and dev.parent_id == existing_hub.id
+                                ),
+                            })
                     else:
                         unregistered_assets.append({
                             "mac": m,
@@ -296,10 +337,30 @@ def discover_edge_topology(
                             "suggested_name": format_terminal_default_name(m, matched_ip, v),
                         })
 
+                # If this port already has an unmanaged switch, include any devices already attached under it
+                if existing_hub:
+                    for d in all_devices:
+                        if (
+                            d.parent_id == existing_hub.id
+                            and d.id not in seen_attached_ids
+                            and d.id != existing_hub.id
+                            and d.type not in ("switch", "router", "unmanaged_switch")
+                        ):
+                            seen_attached_ids.add(d.id)
+                            attached_devices.append({
+                                "device_id": d.id,
+                                "name": d.name,
+                                "mac": d.mac_address,
+                                "ip": d.ip_address,
+                                "type": d.type,
+                                "vendor": lookup_vendor(d.mac_address) if d.mac_address else None,
+                                "already_under_hub": True,
+                            })
+
                 total_macs = len(unique_entries)
-                is_ap_scenario = (
+                is_ap_scenario = existing_hub is None and (
                     ap_device is not None
-                    or ((random_count + mobile_count) / total_macs >= 0.5)
+                    or (total_macs > 0 and (random_count + mobile_count) / total_macs >= 0.5)
                 )
 
                 if is_ap_scenario:
@@ -317,15 +378,25 @@ def discover_edge_topology(
                         "sample_macs": [ue["mac"] for ue in unique_entries[:5]],
                     })
                 else:
-                    # Case 2b: Unmanaged Hub
-                    suggested_name = f"{sw.name}_P{p_num}_分线交换机"
+                    # Case 2b: Unmanaged Hub (either existing or new)
+                    if existing_hub:
+                        is_existing = True
+                        hub_id = existing_hub.id
+                        suggested_name = existing_hub.name
+                    else:
+                        is_existing = False
+                        hub_id = None
+                        suggested_name = f"{sw.name}_P{p_num}_分线交换机"
+
                     unmanaged_hubs.append({
                         "switch_id": sw.id,
                         "switch_name": sw.name,
                         "port_num": p_num,
                         "port_name": p_name,
+                        "is_existing": is_existing,
+                        "hub_id": hub_id,
                         "suggested_name": suggested_name,
-                        "terminal_count": total_macs,
+                        "terminal_count": len(attached_devices) + len(unregistered_assets),
                         "attached_devices": attached_devices,
                         "unregistered_assets": unregistered_assets,
                     })
@@ -345,18 +416,21 @@ def apply_edge_topology(
     """Apply edge topology selections into database:
     
     1. Direct Terminals:
-       - If device_id provided: Reparent to switch, bind switch port, and backfill missing mac_address / ip_address.
-       - If device_id is None (new terminal): Create device with IP and MAC (name=IP or MAC), reparent to switch, and bind port.
-    2. Hubs to Create:
-       - Create unmanaged_switch (is_virtual=True), bind switch port.
-       - Reparent existing devices under hub.
-       - Create new devices for unregistered MACs (with matched IP and MAC, named by IP or MAC).
+       - Check if switch port already has an unmanaged switch: if so, reparent to the unmanaged switch
+         and preserve the port binding without overwriting it!
+       - Otherwise: reparent to switch, bind switch port, and backfill missing mac_address / ip_address.
+    2. Hubs to Create / Update:
+       - If an unmanaged switch already exists on this port (by hub_id or port_binding), reuse it without
+         re-creating a duplicate device and without altering existing port bindings!
+       - Reparent existing devices under the hub.
+       - Create new devices for unregistered MACs under the hub.
     """
     all_devices = list(db.scalars(select(Device)))
     mac_to_ip = get_network_ip_mac_table(db, all_devices)
 
     applied_direct_count = 0
     created_hubs_count = 0
+    reused_hubs_count = 0
 
     # 1. Apply Direct Terminals
     for dt in direct_terminals:
@@ -369,16 +443,29 @@ def apply_edge_topology(
         if not sw:
             continue
 
+        # Check if this switch port is ALREADY bound to an unmanaged switch
+        existing_port_hub = None
+        if sw.port_bindings and isinstance(sw.port_bindings, dict):
+            b = sw.port_bindings.get(str(port_num))
+            if isinstance(b, dict):
+                t_id = b.get("target_id")
+                if t_id:
+                    t = db.get(Device, t_id)
+                    if t and t.type == "unmanaged_switch":
+                        existing_port_hub = t
+
         dev_id = dt.get("device_id")
         raw_mac = dt.get("mac")
         norm_mac = normalize_mac(raw_mac)
         ip = dt.get("ip_address") or (mac_to_ip.get(norm_mac) if norm_mac else None)
 
+        target_parent_id = existing_port_hub.id if existing_port_hub else sw.id
+
         if dev_id:
             dev = db.get(Device, dev_id)
             if not dev:
                 continue
-            dev.parent_id = sw.id
+            dev.parent_id = target_parent_id
             # 补齐资料：如果原本没有 MAC 或 IP，自动登记
             if not dev.mac_address and norm_mac:
                 dev.mac_address = norm_mac
@@ -397,20 +484,20 @@ def apply_edge_topology(
                 or ("未知厂商" in dev_name and norm_mac not in dev_name)
             ):
                 dev_name = format_terminal_default_name(norm_mac, ip, vendor)
-            
+
             dev = Device(
                 name=dev_name,
                 type="server",
                 ip_address=ip,
                 mac_address=norm_mac,
-                parent_id=sw.id,
+                parent_id=target_parent_id,
                 status="online" if ip else "unknown",
             )
             db.add(dev)
             db.flush()
 
-        # Update switch port binding if port_count exists
-        if sw.port_count and 1 <= port_num <= sw.port_count:
+        # Update switch port binding ONLY if port does NOT already have an unmanaged switch
+        if existing_port_hub is None and sw.port_count and 1 <= port_num <= sw.port_count:
             bindings = dict(sw.port_bindings or {})
             bindings[str(port_num)] = {
                 "target_id": dev.id,
@@ -435,36 +522,75 @@ def apply_edge_topology(
             continue
 
         hub_name = (hub_item.get("name") or f"{sw.name}_P{port_num}_分线交换机").strip()
-        
-        # Create virtual Hub device
-        hub = Device(
-            name=hub_name,
-            type="unmanaged_switch",
-            is_virtual=True,
-            parent_id=sw.id,
-            port_count=8,  # Default 8 ports for unmanaged dumb switch
-            uplink_port=1,
-            status="online",
-        )
-        db.add(hub)
-        db.flush()  # get hub.id
+        hub_id = hub_item.get("hub_id")
 
-        # Bind switch port to this Hub
-        if sw.port_count and 1 <= port_num <= sw.port_count:
-            bindings = dict(sw.port_bindings or {})
-            bindings[str(port_num)] = {
-                "target_id": hub.id,
-                "target_port": 1,
-                "cable_type": "copper",
-                "rate": "1000M",
-            }
-            sw.port_bindings = bindings
-            flag_modified(sw, "port_bindings")
+        # Determine if an unmanaged switch already exists on this port
+        existing_hub = None
+        if hub_id:
+            existing_hub = db.get(Device, hub_id)
+        if not existing_hub and sw.port_bindings and isinstance(sw.port_bindings, dict):
+            b = sw.port_bindings.get(str(port_num))
+            if isinstance(b, dict):
+                t_id = b.get("target_id")
+                if t_id:
+                    t = db.get(Device, t_id)
+                    if t and t.type == "unmanaged_switch":
+                        existing_hub = t
+
+        if existing_hub:
+            hub = existing_hub
+            # Update custom name if changed by user
+            if hub_name and hub.name != hub_name:
+                hub.name = hub_name
+            # Ensure parent_id is sw.id
+            hub.parent_id = sw.id
+            # Ensure sw port binding points to hub
+            if sw.port_count and 1 <= port_num <= sw.port_count:
+                bindings = dict(sw.port_bindings or {})
+                curr_b = bindings.get(str(port_num))
+                if not curr_b or curr_b.get("target_id") != hub.id:
+                    bindings[str(port_num)] = {
+                        "target_id": hub.id,
+                        "target_port": 1,
+                        "cable_type": "copper",
+                        "rate": "1000M",
+                    }
+                    sw.port_bindings = bindings
+                    flag_modified(sw, "port_bindings")
+            reused_hubs_count += 1
+        else:
+            # Create virtual Hub device
+            hub = Device(
+                name=hub_name,
+                type="unmanaged_switch",
+                is_virtual=True,
+                parent_id=sw.id,
+                port_count=8,  # Default 8 ports for unmanaged dumb switch
+                uplink_port=1,
+                status="online",
+            )
+            db.add(hub)
+            db.flush()  # get hub.id
+
+            # Bind switch port to this new Hub
+            if sw.port_count and 1 <= port_num <= sw.port_count:
+                bindings = dict(sw.port_bindings or {})
+                bindings[str(port_num)] = {
+                    "target_id": hub.id,
+                    "target_port": 1,
+                    "cable_type": "copper",
+                    "rate": "1000M",
+                }
+                sw.port_bindings = bindings
+                flag_modified(sw, "port_bindings")
+            created_hubs_count += 1
 
         # Reparent existing devices under this Hub
         for d_id in hub_item.get("device_ids", []):
+            if d_id == hub.id or d_id == sw.id:
+                continue
             attached_dev = db.get(Device, d_id)
-            if attached_dev:
+            if attached_dev and attached_dev.type not in ("switch", "unmanaged_switch", "router"):
                 attached_dev.parent_id = hub.id
 
         # Enroll unregistered MACs under this Hub
@@ -502,12 +628,12 @@ def apply_edge_topology(
             )
             db.add(new_dev)
 
-        created_hubs_count += 1
-
     db.commit()
 
     return {
         "applied_direct_count": applied_direct_count,
         "created_hubs_count": created_hubs_count,
+        "reused_hubs_count": reused_hubs_count,
     }
+
 

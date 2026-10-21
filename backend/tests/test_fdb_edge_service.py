@@ -295,3 +295,159 @@ def test_format_terminal_default_name():
     assert format_terminal_default_name("C8:A3:62:DF:93:0B", ip=None, vendor="Apple") == "终端 (Apple C8:A3:62:DF:93:0B)"
 
 
+def test_discover_and_apply_with_existing_unmanaged_switch(monkeypatch):
+    """When a switch port already has an unmanaged switch configured:
+    1. discover_edge_topology must not treat 1 learned MAC as direct_terminal;
+       it must recognize the existing unmanaged switch and put the terminal under it.
+    2. apply_edge_topology must NOT overwrite the switch's port binding, and must
+       subsume the terminals under the existing unmanaged switch without creating a duplicate hub.
+    """
+    from app.database import SessionLocal, init_db
+    from app.models import Device
+    from app.services.fdb_edge import discover_edge_topology, apply_edge_topology
+
+    init_db()
+    with SessionLocal() as db:
+        # Create core/main switch
+        sw = Device(
+            name="Main-Switch-24P",
+            type="switch",
+            ip_address="192.168.1.1",
+            mac_address="00:11:22:33:44:55",
+            snmp_enabled=True,
+            port_count=24,
+        )
+        db.add(sw)
+        db.commit()
+
+        # Create subordinate unmanaged dumb switch on Port 5
+        dumb_sw = Device(
+            name="二楼弱电箱5口D-Link",
+            type="unmanaged_switch",
+            parent_id=sw.id,
+            port_count=5,
+            uplink_port=1,
+            is_virtual=True,
+            status="online",
+        )
+        db.add(dumb_sw)
+        db.commit()
+
+        # Set Port 5 on Main Switch to point to dumb_sw
+        sw.port_bindings = {
+            "5": {
+                "target_id": dumb_sw.id,
+                "target_port": 1,
+                "type": "downlink",
+                "rate": "1000M",
+            }
+        }
+        db.commit()
+
+        # Device A is already registered in DB
+        dev_a = Device(
+            name="财务电脑A",
+            type="server",
+            ip_address="192.168.1.105",
+            mac_address="70:85:C2:11:22:33",
+            parent_id=sw.id,  # was mistakenly under sw.id
+        )
+        db.add(dev_a)
+        db.commit()
+
+        # Mock FDB: Port 5 only learns 1 MAC (dev_a)
+        mock_fdb = [
+            {"local_port_num": 5, "local_port_name": "GigabitEthernet5", "learned_mac": "70:85:C2:11:22:33"},
+        ]
+        monkeypatch.setattr("app.services.lldp.get_device_fdb_table", lambda *args, **kwargs: mock_fdb)
+
+        # 1. Test discover_edge_topology
+        res = discover_edge_topology(db, switch_ids=[sw.id])
+        # Port 5 must NOT be in direct_terminals
+        assert len(res["direct_terminals"]) == 0
+        # Port 5 MUST be in unmanaged_hubs
+        assert len(res["unmanaged_hubs"]) == 1
+        hub = res["unmanaged_hubs"][0]
+        assert hub["switch_id"] == sw.id
+        assert hub["port_num"] == 5
+        assert hub["is_existing"] is True
+        assert hub["hub_id"] == dumb_sw.id
+        assert hub["suggested_name"] == "二楼弱电箱5口D-Link"
+        assert len(hub["attached_devices"]) == 1
+        assert hub["attached_devices"][0]["device_id"] == dev_a.id
+
+        # 2. Test apply_edge_topology
+        hubs_to_apply = [
+            {
+                "name": hub["suggested_name"],
+                "switch_id": sw.id,
+                "port_num": 5,
+                "hub_id": dumb_sw.id,
+                "device_ids": [dev_a.id],
+                "unregistered_macs": [
+                    {"mac": "88:25:93:44:55:66", "ip": "192.168.1.106", "name": "财务电脑B"}
+                ],
+            }
+        ]
+
+        apply_res = apply_edge_topology(db, direct_terminals=[], hubs_to_create=hubs_to_apply)
+        assert apply_res["reused_hubs_count"] == 1
+        assert apply_res["created_hubs_count"] == 0
+
+        # Verify database state:
+        db.refresh(sw)
+        db.refresh(dumb_sw)
+        db.refresh(dev_a)
+
+        # Switch port 5 binding MUST still point to dumb_sw!
+        assert sw.port_bindings["5"]["target_id"] == dumb_sw.id
+        # dev_a MUST be reparented under dumb_sw!
+        assert dev_a.parent_id == dumb_sw.id
+
+        # Newly registered dev_b MUST also be under dumb_sw!
+        dev_b = db.query(Device).filter_by(mac_address="88:25:93:44:55:66").first()
+        assert dev_b is not None
+        assert dev_b.parent_id == dumb_sw.id
+        assert dev_b.name == "财务电脑B"
+
+
+def test_apply_direct_terminal_safeguards_existing_hub():
+    """If a direct terminal was sent for a port that has an unmanaged switch,
+    it must NOT overwrite switch port_bindings, and must reparent under the unmanaged switch.
+    """
+    from app.database import SessionLocal, init_db
+    from app.models import Device
+    from app.services.fdb_edge import apply_edge_topology
+
+    init_db()
+    with SessionLocal() as db:
+        sw = Device(name="SW-Safe-Test", type="switch", port_count=24)
+        db.add(sw)
+        db.commit()
+
+        hub = Device(name="Existing-Hub", type="unmanaged_switch", parent_id=sw.id, port_count=8)
+        db.add(hub)
+        db.commit()
+
+        sw.port_bindings = {"3": {"target_id": hub.id, "type": "downlink"}}
+        db.commit()
+
+        client = Device(name="PC-Under-Hub", type="server")
+        db.add(client)
+        db.commit()
+
+        # Send as direct terminal on Port 3
+        dt = [{"device_id": client.id, "switch_id": sw.id, "port_num": 3, "port_name": "GE3"}]
+        res = apply_edge_topology(db, direct_terminals=dt, hubs_to_create=[])
+        assert res["applied_direct_count"] == 1
+
+        db.refresh(sw)
+        db.refresh(client)
+        # Port binding MUST still point to hub, NOT client!
+        assert sw.port_bindings["3"]["target_id"] == hub.id
+        # Client MUST be placed under hub!
+        assert client.parent_id == hub.id
+
+
+
+

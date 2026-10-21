@@ -128,6 +128,8 @@ async function onApplyEdge() {
       switch_id: h.switch_id,
       port_num: h.port_num,
       port_name: h.port_name,
+      hub_id: h.hub_id || null,
+      is_existing: !!h.is_existing,
       device_ids: h.attached_devices.map((d) => d.device_id),
       unregistered_macs: h.unregistered_assets.map((a) => ({
         mac: a.mac,
@@ -142,8 +144,9 @@ async function onApplyEdge() {
     }
 
     const res = await topologyApi.applyEdge(payload)
+    const reusedMsg = res.data.reused_hubs_count ? `，归纳至已有下级傻瓜交换机 ${res.data.reused_hubs_count} 台` : ''
     ElMessage.success(
-      `成功应用边缘接入：直连终端 ${res.data.applied_direct_count} 台，聚合生成分线器 ${res.data.created_hubs_count} 台！`
+      `成功应用边缘接入：直连终端 ${res.data.applied_direct_count} 台，新建分线器 ${res.data.created_hubs_count} 台${reusedMsg}！`
     )
     await store.load()
     emit('applied')
@@ -344,8 +347,12 @@ function onOpen() {
                     style="width: 260px"
                     placeholder="输入分线交换机名称"
                   />
-                  <el-tag size="small" type="warning" style="margin-left: 8px">
-                    挂载 {{ hub.terminal_count }} 台设备
+                  <el-tag
+                    size="small"
+                    :type="hub.is_existing ? 'success' : 'warning'"
+                    style="margin-left: 8px"
+                  >
+                    {{ hub.is_existing ? '已有下级傻瓜交换机' : '推断傻瓜交换机' }} (挂载 {{ hub.terminal_count }} 台设备)
                   </el-tag>
                 </div>
 
@@ -354,8 +361,10 @@ function onOpen() {
                     v-for="(dev, dIdx) in hub.attached_devices"
                     :key="dIdx"
                     class="terminal-chip"
+                    :class="{ 'already-attached': dev.already_under_hub }"
                   >
                     💻 {{ dev.name }} ({{ dev.ip || dev.mac }})
+                    <span v-if="dev.already_under_hub" class="badge-sub">已归纳</span>
                   </span>
                   <span
                     v-for="(unreg, uIdx) in hub.unregistered_assets"
@@ -558,6 +567,16 @@ function onOpen() {
 .terminal-chip.unreg {
   border-style: dashed;
   color: var(--el-color-warning-dark-2);
+}
+
+.badge-sub {
+  font-size: 10px;
+  background: var(--el-color-success-light-9, #f0f9eb);
+  color: var(--el-color-success, #67c23a);
+  border: 1px solid var(--el-color-success-light-5, #e1f3d8);
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 4px;
 }
 
 .ap-block {
