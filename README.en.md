@@ -46,7 +46,7 @@ docker run -d --name weaver \
   --restart unless-stopped \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=change-me-to-a-long-random-string \
-  ghcr.io/langdalebecks204-bit/webweaver:0.6.3
+  ghcr.io/langdalebecks204-bit/webweaver:0.6.4
 ```
 
 - `--net=host`: recommended network mode to allow direct ICMP and SNMP (UDP 161) communication with LAN devices/switches without Docker bridge subnet conflict.
@@ -104,7 +104,7 @@ Since `v0.5.6`, WebWeaver supports one-click differential in-place updates from 
 
 ```bash
 # Pinned tag (recommended)
-docker pull ghcr.io/langdalebecks204-bit/webweaver:0.6.3
+docker pull ghcr.io/langdalebecks204-bit/webweaver:0.6.4
 docker rm -f weaver
 docker run -d --name weaver \
   --net=host \
@@ -112,7 +112,7 @@ docker run -d --name weaver \
   --restart unless-stopped \
   -v webweaver-data:/data \
   -e WEAVER_JWT_SECRET=change-me-to-a-long-random-string \
-  ghcr.io/langdalebecks204-bit/webweaver:0.6.3
+  ghcr.io/langdalebecks204-bit/webweaver:0.6.4
 
 # Or with compose
 docker compose pull

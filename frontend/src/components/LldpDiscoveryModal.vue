@@ -81,9 +81,9 @@ watch(
 )
 
 function onTabChange(tab) {
-  if (tab === 'edge' && !edgeResult.value.direct_terminals.length && !edgeResult.value.unmanaged_hubs.length) {
+  if (tab === 'edge') {
     loadEdgeDiscovery()
-  } else if (tab === 'backbone' && !scanResult.value.links.length) {
+  } else if (tab === 'backbone') {
     loadDiscovery()
   }
 }
@@ -105,6 +105,8 @@ async function onApplyBackbone() {
   try {
     const res = await topologyApi.applyLldp(selectedLinks.value, updateHierarchy.value)
     ElMessage.success(`成功固化 ${res.data.applied_count} 个物理端口互联！`)
+    scanResult.value = { links: [], unmatched_neighbors: [], scanned_devices_count: 0 }
+    selectedLinks.value = []
     await store.load()
     emit('applied')
     emit('update:modelValue', false)
@@ -148,6 +150,9 @@ async function onApplyEdge() {
     ElMessage.success(
       `成功应用边缘接入：直连终端 ${res.data.applied_direct_count} 台，新建分线器 ${res.data.created_hubs_count} 台${reusedMsg}！`
     )
+    edgeResult.value = { direct_terminals: [], unmanaged_hubs: [], ap_clusters: [] }
+    selectedDirect.value = []
+    hubSelections.value = []
     await store.load()
     emit('applied')
     emit('update:modelValue', false)

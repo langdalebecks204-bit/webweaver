@@ -68,6 +68,78 @@ def format_terminal_default_name(
     return f"终端 ({clean_vendor}{clean_mac})"
 
 
+def is_descendant_of(db: Session, dev_id: Optional[int], ancestor_id: Optional[int]) -> bool:
+    """Check if dev_id is an indirect descendant of ancestor_id in the device tree."""
+    if not dev_id or not ancestor_id:
+        return False
+    curr = db.get(Device, dev_id)
+    seen = set()
+    while curr and curr.parent_id is not None:
+        if curr.parent_id in seen:
+            break
+        seen.add(curr.parent_id)
+        if curr.parent_id == ancestor_id:
+            return True
+        curr = db.get(Device, curr.parent_id)
+    return False
+
+
+def find_or_reuse_device(
+    db: Session,
+    dev_id: Optional[int],
+    norm_mac: Optional[str],
+    ip: Optional[str],
+    live_devices: List[Device],
+) -> Optional[Device]:
+    """Find an existing device by ID, normalized MAC, or IP to ensure idempotent additions."""
+    # 1. By ID
+    if dev_id:
+        d = db.get(Device, dev_id)
+        if d:
+            return d
+
+    # 2. By Normalized MAC
+    if norm_mac:
+        for d in live_devices:
+            if d.mac_address and normalize_mac(d.mac_address) == norm_mac:
+                return d
+        d = db.scalars(select(Device).where(Device.mac_address == norm_mac)).first()
+        if d:
+            return d
+
+    # 3. By IP Address
+    if ip:
+        for d in live_devices:
+            if d.ip_address == ip:
+                return d
+        d = db.scalars(select(Device).where(Device.ip_address == ip)).first()
+        if d:
+            return d
+
+    return None
+
+
+def get_top_unmanaged_switch_under(db: Session, dev_id: Optional[int], ancestor_sw_id: int) -> Optional[Device]:
+    """If dev_id is cascaded under an unmanaged switch that descends from ancestor_sw_id,
+    return that top-level unmanaged switch directly under ancestor_sw_id.
+    """
+    if not dev_id:
+        return None
+    curr = db.get(Device, dev_id)
+    top_unm: Optional[Device] = None
+    seen = set()
+    while curr and curr.parent_id is not None:
+        if curr.id in seen:
+            break
+        seen.add(curr.id)
+        if curr.type == "unmanaged_switch":
+            top_unm = curr
+        if curr.parent_id == ancestor_sw_id:
+            return top_unm
+        curr = db.get(Device, curr.parent_id)
+    return None
+
+
 def get_network_ip_mac_table(db: Session, all_devices: List[Device]) -> Dict[str, str]:
     """Build a mapping of normalized MAC -> IP address from all available sources:
     1. Registered devices with both IP and MAC.
@@ -245,8 +317,48 @@ def discover_edge_topology(
             p_name = port_names.get(p_num, f"Port{p_num}")
             existing_hub = existing_port_hubs.get(p_num)
 
-            # If this port has NO existing unmanaged switch AND has exactly 1 MAC, it is a direct terminal
+            # Check if any learned MAC on this port maps to a device cascaded under an unmanaged switch
+            if existing_hub is None:
+                for ue in unique_entries:
+                    m = ue["mac"]
+                    dev = mac_to_dev.get(m)
+                    if not dev and mac_to_ip.get(m):
+                        dev = ip_to_dev.get(mac_to_ip[m])
+                    if dev:
+                        top_hub = get_top_unmanaged_switch_under(db, dev.id, sw.id)
+                        if top_hub:
+                            existing_hub = top_hub
+                            existing_port_hubs[p_num] = top_hub
+                            break
+                        if dev.parent_id:
+                            p_dev = db.get(Device, dev.parent_id)
+                            if p_dev and p_dev.type == "unmanaged_switch":
+                                existing_hub = p_dev
+                                existing_port_hubs[p_num] = p_dev
+                                break
+
+            # If this port has NO existing unmanaged switch AND has exactly 1 MAC,
+            # verify that the single device is not already cascaded under an unmanaged switch:
+            is_direct = False
             if existing_hub is None and len(unique_entries) == 1:
+                single_mac = unique_entries[0]["mac"]
+                s_dev = mac_to_dev.get(single_mac)
+                if not s_dev and mac_to_ip.get(single_mac):
+                    s_dev = ip_to_dev.get(mac_to_ip[single_mac])
+                if s_dev and s_dev.parent_id:
+                    s_p = db.get(Device, s_dev.parent_id)
+                    if s_p and s_p.type == "unmanaged_switch":
+                        # This device is already organized under an unmanaged switch!
+                        # Keep it under unmanaged hubs, not direct terminals!
+                        existing_hub = s_p
+                        existing_port_hubs[p_num] = s_p
+                        is_direct = False
+                    else:
+                        is_direct = True
+                else:
+                    is_direct = True
+
+            if is_direct:
                 # Case 1: True Single MAC Direct Connection
                 mac = unique_entries[0]["mac"]
                 vendor = lookup_vendor(mac)
@@ -317,6 +429,19 @@ def discover_edge_topology(
                     if dev:
                         if dev.id not in seen_attached_ids:
                             seen_attached_ids.add(dev.id)
+                            # Multi-level check: device is already under hub if directly under hub
+                            # or under any descendant of hub (or any unmanaged switch)
+                            is_already = False
+                            if existing_hub:
+                                is_already = bool(
+                                    dev.parent_id == existing_hub.id
+                                    or is_descendant_of(db, dev.id, existing_hub.id)
+                                    or is_descendant_of(db, dev.parent_id, existing_hub.id)
+                                )
+                            elif dev.parent_id:
+                                p_d = db.get(Device, dev.parent_id)
+                                is_already = bool(p_d and p_d.type == "unmanaged_switch")
+
                             attached_devices.append({
                                 "device_id": dev.id,
                                 "name": dev.name,
@@ -324,9 +449,7 @@ def discover_edge_topology(
                                 "ip": dev.ip_address or matched_ip,
                                 "type": dev.type,
                                 "vendor": v,
-                                "already_under_hub": bool(
-                                    existing_hub and dev.parent_id == existing_hub.id
-                                ),
+                                "already_under_hub": is_already,
                             })
                     else:
                         unregistered_assets.append({
@@ -341,7 +464,7 @@ def discover_edge_topology(
                 if existing_hub:
                     for d in all_devices:
                         if (
-                            d.parent_id == existing_hub.id
+                            (d.parent_id == existing_hub.id or is_descendant_of(db, d.id, existing_hub.id))
                             and d.id not in seen_attached_ids
                             and d.id != existing_hub.id
                             and d.type not in ("switch", "router", "unmanaged_switch")
@@ -426,6 +549,7 @@ def apply_edge_topology(
        - Create new devices for unregistered MACs under the hub.
     """
     all_devices = list(db.scalars(select(Device)))
+    live_devices = list(all_devices)
     mac_to_ip = get_network_ip_mac_table(db, all_devices)
 
     applied_direct_count = 0
@@ -443,7 +567,12 @@ def apply_edge_topology(
         if not sw:
             continue
 
-        # Check if this switch port is ALREADY bound to an unmanaged switch
+        dev_id = dt.get("device_id")
+        raw_mac = dt.get("mac")
+        norm_mac = normalize_mac(raw_mac)
+        ip = dt.get("ip_address") or (mac_to_ip.get(norm_mac) if norm_mac else None)
+
+        # Check if an unmanaged switch already exists on this port
         existing_port_hub = None
         if sw.port_bindings and isinstance(sw.port_bindings, dict):
             b = sw.port_bindings.get(str(port_num))
@@ -454,25 +583,37 @@ def apply_edge_topology(
                     if t and t.type == "unmanaged_switch":
                         existing_port_hub = t
 
-        dev_id = dt.get("device_id")
-        raw_mac = dt.get("mac")
-        norm_mac = normalize_mac(raw_mac)
-        ip = dt.get("ip_address") or (mac_to_ip.get(norm_mac) if norm_mac else None)
+        # Find or reuse device to prevent duplicate additions
+        dev = find_or_reuse_device(db, dev_id, norm_mac, ip, live_devices)
+
+        if not existing_port_hub and dev:
+            existing_port_hub = get_top_unmanaged_switch_under(db, dev.id, sw.id)
 
         target_parent_id = existing_port_hub.id if existing_port_hub else sw.id
 
-        if dev_id:
-            dev = db.get(Device, dev_id)
-            if not dev:
-                continue
-            dev.parent_id = target_parent_id
-            # 补齐资料：如果原本没有 MAC 或 IP，自动登记
+        if dev:
+            # Hierarchy protection:
+            # If dev's parent is an unmanaged_switch, DO NOT reparent to sw.id!
+            curr_parent = db.get(Device, dev.parent_id) if dev.parent_id else None
+            is_under_unmanaged = bool(curr_parent and curr_parent.type == "unmanaged_switch")
+
+            if is_under_unmanaged:
+                if existing_port_hub and (
+                    dev.parent_id == existing_port_hub.id
+                    or is_descendant_of(db, dev.parent_id, existing_port_hub.id)
+                ):
+                    pass  # Preserved under existing hub or sub-hub
+                elif existing_port_hub and dev.parent_id is None:
+                    dev.parent_id = existing_port_hub.id
+                # else keep dev.parent_id unchanged to preserve multi-level unmanaged switch structure
+            else:
+                dev.parent_id = target_parent_id
+
             if not dev.mac_address and norm_mac:
                 dev.mac_address = norm_mac
             if not dev.ip_address and ip:
                 dev.ip_address = ip
         else:
-            # 新终端：自动创建并入库
             if not norm_mac:
                 continue
             vendor = lookup_vendor(norm_mac)
@@ -495,9 +636,13 @@ def apply_edge_topology(
             )
             db.add(dev)
             db.flush()
+            live_devices.append(dev)
 
         # Update switch port binding ONLY if port does NOT already have an unmanaged switch
-        if existing_port_hub is None and sw.port_count and 1 <= port_num <= sw.port_count:
+        # and dev is not under an unmanaged switch
+        dev_curr_p = db.get(Device, dev.parent_id) if dev.parent_id else None
+        dev_is_under_unmanaged = bool(dev_curr_p and dev_curr_p.type == "unmanaged_switch")
+        if existing_port_hub is None and not dev_is_under_unmanaged and sw.port_count and 1 <= port_num <= sw.port_count:
             bindings = dict(sw.port_bindings or {})
             bindings[str(port_num)] = {
                 "target_id": dev.id,
@@ -524,7 +669,6 @@ def apply_edge_topology(
         hub_name = (hub_item.get("name") or f"{sw.name}_P{port_num}_分线交换机").strip()
         hub_id = hub_item.get("hub_id")
 
-        # Determine if an unmanaged switch already exists on this port
         existing_hub = None
         if hub_id:
             existing_hub = db.get(Device, hub_id)
@@ -537,14 +681,18 @@ def apply_edge_topology(
                     if t and t.type == "unmanaged_switch":
                         existing_hub = t
 
+        if not existing_hub:
+            for d_id in hub_item.get("device_ids", []):
+                t_hub = get_top_unmanaged_switch_under(db, d_id, sw.id)
+                if t_hub:
+                    existing_hub = t_hub
+                    break
+
         if existing_hub:
             hub = existing_hub
-            # Update custom name if changed by user
             if hub_name and hub.name != hub_name:
                 hub.name = hub_name
-            # Ensure parent_id is sw.id
             hub.parent_id = sw.id
-            # Ensure sw port binding points to hub
             if sw.port_count and 1 <= port_num <= sw.port_count:
                 bindings = dict(sw.port_bindings or {})
                 curr_b = bindings.get(str(port_num))
@@ -559,20 +707,19 @@ def apply_edge_topology(
                     flag_modified(sw, "port_bindings")
             reused_hubs_count += 1
         else:
-            # Create virtual Hub device
             hub = Device(
                 name=hub_name,
                 type="unmanaged_switch",
                 is_virtual=True,
                 parent_id=sw.id,
-                port_count=8,  # Default 8 ports for unmanaged dumb switch
+                port_count=8,
                 uplink_port=1,
                 status="online",
             )
             db.add(hub)
-            db.flush()  # get hub.id
+            db.flush()
+            live_devices.append(hub)
 
-            # Bind switch port to this new Hub
             if sw.port_count and 1 <= port_num <= sw.port_count:
                 bindings = dict(sw.port_bindings or {})
                 bindings[str(port_num)] = {
@@ -585,15 +732,27 @@ def apply_edge_topology(
                 flag_modified(sw, "port_bindings")
             created_hubs_count += 1
 
-        # Reparent existing devices under this Hub
+        # Reparent existing devices under this Hub (PRESERVING MULTI-LEVEL HIERARCHY!)
         for d_id in hub_item.get("device_ids", []):
             if d_id == hub.id or d_id == sw.id:
                 continue
             attached_dev = db.get(Device, d_id)
-            if attached_dev and attached_dev.type not in ("switch", "unmanaged_switch", "router"):
-                attached_dev.parent_id = hub.id
+            if not attached_dev or attached_dev.type in ("switch", "unmanaged_switch", "router"):
+                continue
 
-        # Enroll unregistered MACs under this Hub
+            if attached_dev.parent_id == hub.id:
+                continue
+
+            if is_descendant_of(db, attached_dev.parent_id, hub.id) or is_descendant_of(db, attached_dev.id, hub.id):
+                continue
+
+            curr_p = db.get(Device, attached_dev.parent_id) if attached_dev.parent_id else None
+            if curr_p and curr_p.type == "unmanaged_switch":
+                continue
+
+            attached_dev.parent_id = hub.id
+
+        # Enroll unregistered MACs under this Hub (IDEMPOTENT & MULTI-LEVEL SAFE!)
         for raw_item in hub_item.get("unregistered_macs", []):
             if isinstance(raw_item, dict):
                 raw_mac = raw_item.get("mac")
@@ -608,25 +767,43 @@ def apply_edge_topology(
             if not norm_mac:
                 continue
             ip = item_ip or mac_to_ip.get(norm_mac)
-            vendor = lookup_vendor(norm_mac)
-            if (
-                item_name
-                and item_name != "终端 (未知厂商)"
-                and not ("未知厂商" in item_name and norm_mac not in item_name)
-            ):
-                name = item_name
-            else:
-                name = format_terminal_default_name(norm_mac, ip, vendor)
 
-            new_dev = Device(
-                name=name,
-                type="server",
-                ip_address=ip,
-                mac_address=norm_mac,
-                parent_id=hub.id,
-                status="online" if ip else "unknown",
-            )
-            db.add(new_dev)
+            existing_dev = find_or_reuse_device(db, None, norm_mac, ip, live_devices)
+            if existing_dev:
+                # Device already exists: do not duplicate!
+                if existing_dev.parent_id == hub.id or is_descendant_of(db, existing_dev.parent_id, hub.id):
+                    pass
+                elif existing_dev.parent_id and (p := db.get(Device, existing_dev.parent_id)) and p.type == "unmanaged_switch":
+                    pass
+                elif existing_dev.parent_id is None or existing_dev.parent_id == sw.id:
+                    existing_dev.parent_id = hub.id
+
+                if not existing_dev.ip_address and ip:
+                    existing_dev.ip_address = ip
+                if not existing_dev.mac_address and norm_mac:
+                    existing_dev.mac_address = norm_mac
+            else:
+                vendor = lookup_vendor(norm_mac)
+                if (
+                    item_name
+                    and item_name != "终端 (未知厂商)"
+                    and not ("未知厂商" in item_name and norm_mac not in item_name)
+                ):
+                    name = item_name
+                else:
+                    name = format_terminal_default_name(norm_mac, ip, vendor)
+
+                new_dev = Device(
+                    name=name,
+                    type="server",
+                    ip_address=ip,
+                    mac_address=norm_mac,
+                    parent_id=hub.id,
+                    status="online" if ip else "unknown",
+                )
+                db.add(new_dev)
+                db.flush()
+                live_devices.append(new_dev)
 
     db.commit()
 

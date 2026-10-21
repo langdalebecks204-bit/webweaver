@@ -449,5 +449,175 @@ def test_apply_direct_terminal_safeguards_existing_hub():
         assert client.parent_id == hub.id
 
 
+def test_repeated_fdb_apply_does_not_create_duplicates():
+    """Testing Problem 1: Repeated '一键添加' must be idempotent and not create duplicate devices."""
+    from app.database import SessionLocal, init_db
+    from app.models import Device
+    from app.services.fdb_edge import apply_edge_topology
+
+    init_db()
+    with SessionLocal() as db:
+        sw = Device(name="SW-Repeat-Test", type="switch", port_count=24)
+        db.add(sw)
+        db.commit()
+
+        direct_terminals = [
+            {
+                "switch_id": sw.id,
+                "port_num": 1,
+                "port_name": "GE1",
+                "mac": "1A:2B:3C:4D:5E:6F",
+                "ip_address": "192.168.1.101",
+                "device_id": None,
+                "device_name": "PC-Direct-1",
+            }
+        ]
+        hubs_to_create = [
+            {
+                "name": "走廊分线交换机",
+                "switch_id": sw.id,
+                "port_num": 2,
+                "port_name": "GE2",
+                "device_ids": [],
+                "unregistered_macs": [
+                    {"mac": "2A:3B:4C:5D:6E:7F", "ip": "192.168.1.102", "name": "PC-Hub-1"},
+                    {"mac": "3A:4B:5C:6D:7E:8F", "ip": "192.168.1.103", "name": "PC-Hub-2"},
+                ],
+            }
+        ]
+
+        # 1st Application
+        res1 = apply_edge_topology(db, direct_terminals, hubs_to_create)
+        assert res1["applied_direct_count"] == 1
+        assert res1["created_hubs_count"] == 1
+
+        total_devs_1 = db.query(Device).count()
+
+        # 2nd Application with identical payload (simulating user clicking apply again)
+        res2 = apply_edge_topology(db, direct_terminals, hubs_to_create)
+        assert res2["applied_direct_count"] == 1
+        assert res2["reused_hubs_count"] == 1
+        assert res2["created_hubs_count"] == 0
+
+        total_devs_2 = db.query(Device).count()
+        # Total device count in database MUST be identical (no duplicate rows created!)
+        assert total_devs_1 == total_devs_2
+
+        # Check unique MAC counts
+        mac1 = db.query(Device).filter_by(mac_address="1A:2B:3C:4D:5E:6F").all()
+        assert len(mac1) == 1
+        mac2 = db.query(Device).filter_by(mac_address="2A:3B:4C:5D:6E:7F").all()
+        assert len(mac2) == 1
+        mac3 = db.query(Device).filter_by(mac_address="3A:4B:5C:6D:7E:8F").all()
+        assert len(mac3) == 1
+
+
+def test_multilevel_unmanaged_switch_hierarchy_preserved(monkeypatch):
+    """Testing Problem 2: When devices are organized under multi-level unmanaged switches:
+    SW -> Hub1 -> Hub2 -> PC1
+    SW -> Hub1 -> PC2
+    1. discover_edge_topology must recognize Hub1 as existing hub, and mark both PC1 & PC2 as already_under_hub.
+    2. Even if only PC1 is learned (1 MAC), it must NOT be turned into a direct terminal of SW.
+    3. apply_edge_topology must NOT flatten PC1's parent to Hub1 or SW, preserving Hub2 -> PC1!
+    """
+    from app.database import SessionLocal, init_db
+    from app.models import Device
+    from app.services.fdb_edge import discover_edge_topology, apply_edge_topology
+
+    init_db()
+    with SessionLocal() as db:
+        # 1. Main Switch
+        sw = Device(name="SW-Core", type="switch", ip_address="192.168.1.1", port_count=24, snmp_enabled=True)
+        db.add(sw)
+        db.commit()
+
+        # 2. Level 1 Unmanaged Switch
+        hub1 = Device(name="弱电箱一级傻瓜交换机", type="unmanaged_switch", parent_id=sw.id, is_virtual=True)
+        db.add(hub1)
+        db.commit()
+
+        # Port 4 points to Hub1
+        sw.port_bindings = {"4": {"target_id": hub1.id, "target_port": 1, "type": "downlink"}}
+        db.commit()
+
+        # 3. Level 2 Unmanaged Switch
+        hub2 = Device(name="办公区二级傻瓜交换机", type="unmanaged_switch", parent_id=hub1.id, is_virtual=True)
+        db.add(hub2)
+        db.commit()
+
+        # 4. PC1 under Level 2 (Hub2)
+        pc1 = Device(name="开发电脑-1", type="server", ip_address="192.168.1.201", mac_address="AA:11:22:33:44:01", parent_id=hub2.id)
+        # 5. PC2 under Level 1 (Hub1)
+        pc2 = Device(name="打印机-1", type="server", ip_address="192.168.1.202", mac_address="AA:11:22:33:44:02", parent_id=hub1.id)
+        db.add_all([pc1, pc2])
+        db.commit()
+
+        # Test Case A: Both PC1 and PC2 learned on port 4
+        mock_fdb = [
+            {"local_port_num": 4, "local_port_name": "GE4", "learned_mac": "AA:11:22:33:44:01"},
+            {"local_port_num": 4, "local_port_name": "GE4", "learned_mac": "AA:11:22:33:44:02"},
+        ]
+        monkeypatch.setattr("app.services.lldp.get_device_fdb_table", lambda *args, **kwargs: mock_fdb)
+
+        disc = discover_edge_topology(db, switch_ids=[sw.id])
+        assert len(disc["direct_terminals"]) == 0
+        assert len(disc["unmanaged_hubs"]) == 1
+
+        h_info = disc["unmanaged_hubs"][0]
+        assert h_info["hub_id"] == hub1.id
+        assert h_info["is_existing"] is True
+
+        att = {d["device_id"]: d for d in h_info["attached_devices"]}
+        assert pc1.id in att
+        assert pc2.id in att
+        # Both must be identified as already under this hub branch!
+        assert att[pc1.id]["already_under_hub"] is True
+        assert att[pc2.id]["already_under_hub"] is True
+
+        # Apply edge topology
+        hubs_apply = [
+            {
+                "name": h_info["suggested_name"],
+                "switch_id": sw.id,
+                "port_num": 4,
+                "hub_id": hub1.id,
+                "device_ids": [pc1.id, pc2.id],
+                "unregistered_macs": [],
+            }
+        ]
+        apply_edge_topology(db, direct_terminals=[], hubs_to_create=hubs_apply)
+
+        db.refresh(pc1)
+        db.refresh(pc2)
+        # CRITICAL VERIFICATION:
+        # PC1 MUST REMAIN under Hub2 (NOT Hub1, NOT SW)!
+        assert pc1.parent_id == hub2.id
+        # PC2 remains under Hub1
+        assert pc2.parent_id == hub1.id
+
+        # Test Case B: Single MAC active (only PC1 on port 4)
+        mock_fdb_single = [
+            {"local_port_num": 4, "local_port_name": "GE4", "learned_mac": "AA:11:22:33:44:01"},
+        ]
+        monkeypatch.setattr("app.services.lldp.get_device_fdb_table", lambda *args, **kwargs: mock_fdb_single)
+
+        disc_single = discover_edge_topology(db, switch_ids=[sw.id])
+        # Even with single MAC, it MUST NOT be classified as direct_terminals!
+        assert len(disc_single["direct_terminals"]) == 0
+        assert len(disc_single["unmanaged_hubs"]) == 1
+
+        # Even if someone maliciously calls apply with PC1 as a direct terminal on Port 4:
+        dt_malicious = [{"device_id": pc1.id, "switch_id": sw.id, "port_num": 4, "port_name": "GE4"}]
+        apply_edge_topology(db, direct_terminals=dt_malicious, hubs_to_create=[])
+
+        db.refresh(pc1)
+        db.refresh(sw)
+        # PC1's parent MUST STILL NOT be hijacked to SW!
+        assert pc1.parent_id == hub2.id
+        # Port 4 binding MUST STILL point to Hub1, NOT pc1!
+        assert sw.port_bindings["4"]["target_id"] == hub1.id
+
+
+
 
 
