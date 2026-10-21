@@ -46,6 +46,51 @@ def is_mobile_oui(vendor: Optional[str]) -> bool:
     return any(mv in v_lower for mv in MOBILE_VENDORS)
 
 
+def get_network_ip_mac_table(db: Session, all_devices: List[Device]) -> Dict[str, str]:
+    """Build a mapping of normalized MAC -> IP address from all available sources:
+    1. Registered devices with both IP and MAC.
+    2. Manageable switches / routers ARP table via SNMP.
+    3. WebWeaver host local ARP table (/proc/net/arp or arp -a).
+    """
+    mac_to_ip: Dict[str, str] = {}
+    
+    # 1. Registered devices
+    for d in all_devices:
+        if d.mac_address and d.ip_address:
+            norm = normalize_mac(d.mac_address)
+            if norm:
+                mac_to_ip[norm] = d.ip_address
+
+    # 2. Query ARP from manageable switches / routers
+    try:
+        from app.services.arp import get_device_arp_table, get_local_arp
+        for d in all_devices:
+            if d.snmp_enabled and d.ip_address and d.type in ("switch", "router", "gateway"):
+                try:
+                    comm = d.snmp_community or "public"
+                    port = d.snmp_port or 161
+                    ver = d.snmp_version or "v2c"
+                    arp_entries = get_device_arp_table(d.ip_address, comm, port, ver, timeout=0.8)
+                    for entry in arp_entries:
+                        norm = normalize_mac(entry.get("mac"))
+                        ip = entry.get("ip")
+                        if norm and ip:
+                            mac_to_ip.setdefault(norm, ip)
+                except Exception:
+                    pass
+
+        # 3. Query local host ARP
+        for entry in get_local_arp():
+            norm = normalize_mac(entry.get("mac"))
+            ip = entry.get("ip")
+            if norm and ip:
+                mac_to_ip.setdefault(norm, ip)
+    except Exception:
+        pass
+
+    return mac_to_ip
+
+
 def discover_edge_topology(
     db: Session, switch_ids: Optional[List[int]] = None
 ) -> Dict[str, Any]:
@@ -57,16 +102,22 @@ def discover_edge_topology(
     """
     all_devices = list(db.scalars(select(Device)))
     
-    # Map normalized MAC -> Device
+    # Map normalized MAC -> Device and IP -> Device
     mac_to_dev: Dict[str, Device] = {}
+    ip_to_dev: Dict[str, Device] = {}
     core_macs: set[str] = set()
     for d in all_devices:
+        if d.ip_address:
+            ip_to_dev[d.ip_address] = d
         if d.mac_address:
             norm = normalize_mac(d.mac_address)
             if norm:
                 mac_to_dev[norm] = d
                 if d.type in ("switch", "router"):
                     core_macs.add(norm)
+
+    # Build network-wide IP-MAC map
+    mac_to_ip = get_network_ip_mac_table(db, all_devices)
 
     # Filter target switches
     switches = [d for d in all_devices if d.type == "switch" and d.snmp_enabled and d.ip_address]
@@ -147,8 +198,25 @@ def discover_edge_topology(
             if len(unique_entries) == 1:
                 # Case 1: Single MAC Direct Connection
                 mac = unique_entries[0]["mac"]
-                matched_dev = mac_to_dev.get(mac)
                 vendor = lookup_vendor(mac)
+                matched_dev = mac_to_dev.get(mac)
+                matched_ip = mac_to_ip.get(mac)
+
+                # Try matching by IP if MAC was not registered on any device
+                if not matched_dev and matched_ip:
+                    matched_dev = ip_to_dev.get(matched_ip)
+
+                if matched_dev:
+                    dev_id = matched_dev.id
+                    dev_name = matched_dev.name
+                    dev_ip = matched_dev.ip_address or matched_ip
+                    matched_by = "mac" if mac in mac_to_dev else "ip_mac"
+                else:
+                    dev_id = None
+                    dev_ip = matched_ip
+                    # 命名规则：如果有 IP 则显示 IP，如果没有 IP 则显示 MAC
+                    dev_name = f"终端 ({dev_ip})" if dev_ip else f"终端 ({mac})"
+                    matched_by = "ip_mac_unregistered" if dev_ip else "fdb_unregistered"
                 
                 direct_terminals.append({
                     "switch_id": sw.id,
@@ -156,10 +224,10 @@ def discover_edge_topology(
                     "port_num": p_num,
                     "port_name": p_name,
                     "mac": mac,
-                    "ip_address": matched_dev.ip_address if matched_dev else None,
-                    "device_id": matched_dev.id if matched_dev else None,
-                    "device_name": matched_dev.name if matched_dev else (f"设备 ({vendor})" if vendor != "-" else "未知设备"),
-                    "matched_by": "mac" if matched_dev else "fdb_unregistered",
+                    "ip_address": dev_ip,
+                    "device_id": dev_id,
+                    "device_name": dev_name,
+                    "matched_by": matched_by,
                     "vendor": vendor,
                 })
             else:
@@ -175,6 +243,9 @@ def discover_edge_topology(
                     m = ue["mac"]
                     v = lookup_vendor(m)
                     dev = mac_to_dev.get(m)
+                    matched_ip = mac_to_ip.get(m)
+                    if not dev and matched_ip:
+                        dev = ip_to_dev.get(matched_ip)
                     
                     if dev and dev.type == "ap":
                         ap_device = dev
@@ -191,16 +262,17 @@ def discover_edge_topology(
                             "device_id": dev.id,
                             "name": dev.name,
                             "mac": m,
-                            "ip": dev.ip_address,
+                            "ip": dev.ip_address or matched_ip,
                             "type": dev.type,
                             "vendor": v,
                         })
                     else:
                         unregistered_assets.append({
                             "mac": m,
-                            "ip": None,
+                            "ip": matched_ip,
                             "vendor": v,
                             "is_random_mac": is_rand,
+                            "suggested_name": f"终端 ({matched_ip})" if matched_ip else f"终端 ({m})",
                         })
 
                 total_macs = len(unique_entries)
@@ -251,27 +323,65 @@ def apply_edge_topology(
 ) -> Dict[str, Any]:
     """Apply edge topology selections into database:
     
-    1. Direct Terminals: Update terminal parent_id to switch and bind to switch port.
-    2. Hubs to Create: Create unmanaged_switch device, link to switch port, and reparent attached devices.
+    1. Direct Terminals:
+       - If device_id provided: Reparent to switch, bind switch port, and backfill missing mac_address / ip_address.
+       - If device_id is None (new terminal): Create device with IP and MAC (name=IP or MAC), reparent to switch, and bind port.
+    2. Hubs to Create:
+       - Create unmanaged_switch (is_virtual=True), bind switch port.
+       - Reparent existing devices under hub.
+       - Create new devices for unregistered MACs (with matched IP and MAC, named by IP or MAC).
     """
+    all_devices = list(db.scalars(select(Device)))
+    mac_to_ip = get_network_ip_mac_table(db, all_devices)
+
     applied_direct_count = 0
     created_hubs_count = 0
 
     # 1. Apply Direct Terminals
     for dt in direct_terminals:
-        dev_id = dt.get("device_id")
         sw_id = dt.get("switch_id")
         port_num = dt.get("port_num")
-        if not dev_id or not sw_id or not port_num:
+        if not sw_id or not port_num:
             continue
 
-        dev = db.get(Device, dev_id)
         sw = db.get(Device, sw_id)
-        if not dev or not sw:
+        if not sw:
             continue
 
-        # Update terminal parent_id to switch
-        dev.parent_id = sw.id
+        dev_id = dt.get("device_id")
+        raw_mac = dt.get("mac")
+        norm_mac = normalize_mac(raw_mac)
+        ip = dt.get("ip_address") or (mac_to_ip.get(norm_mac) if norm_mac else None)
+
+        if dev_id:
+            dev = db.get(Device, dev_id)
+            if not dev:
+                continue
+            dev.parent_id = sw.id
+            # 补齐资料：如果原本没有 MAC 或 IP，自动登记
+            if not dev.mac_address and norm_mac:
+                dev.mac_address = norm_mac
+            if not dev.ip_address and ip:
+                dev.ip_address = ip
+        else:
+            # 新终端：自动创建并入库
+            if not norm_mac:
+                continue
+            # 名字：如果没有 IP，就显示 MAC；如果有 IP，显示 IP
+            dev_name = dt.get("device_name")
+            if not dev_name or dev_name in ("未知设备",) or dev_name.startswith("设备 ("):
+                dev_name = f"终端 ({ip})" if ip else f"终端 ({norm_mac})"
+            
+            dev = Device(
+                name=dev_name,
+                type="server",
+                ip_address=ip,
+                mac_address=norm_mac,
+                parent_id=sw.id,
+                status="online" if ip else "unknown",
+            )
+            db.add(dev)
+            db.flush()
 
         # Update switch port binding if port_count exists
         if sw.port_count and 1 <= port_num <= sw.port_count:
@@ -332,17 +442,34 @@ def apply_edge_topology(
                 attached_dev.parent_id = hub.id
 
         # Enroll unregistered MACs under this Hub
-        for raw_mac in hub_item.get("unregistered_macs", []):
+        for raw_item in hub_item.get("unregistered_macs", []):
+            if isinstance(raw_item, dict):
+                raw_mac = raw_item.get("mac")
+                item_ip = raw_item.get("ip")
+                item_name = raw_item.get("name")
+            else:
+                raw_mac = raw_item
+                item_ip = None
+                item_name = None
+
             norm_mac = normalize_mac(raw_mac)
             if not norm_mac:
                 continue
-            vendor = lookup_vendor(norm_mac)
+            ip = item_ip or mac_to_ip.get(norm_mac)
+            if item_name:
+                name = item_name
+            elif ip:
+                name = f"终端 ({ip})"
+            else:
+                name = f"终端 ({norm_mac})"
+
             new_dev = Device(
-                name=f"终端 ({vendor})" if vendor != "-" else f"未登记终端 ({norm_mac[-5:]})",
+                name=name,
                 type="server",
+                ip_address=ip,
                 mac_address=norm_mac,
                 parent_id=hub.id,
-                status="unknown",
+                status="online" if ip else "unknown",
             )
             db.add(new_dev)
 

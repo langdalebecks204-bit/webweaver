@@ -15,7 +15,7 @@ const dialogVisible = ref(false)
 const portDialogVisible = ref(false)
 const submitting = ref(false)
 const editing = ref(null)
-const form = ref({ name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, snmp_enabled: true, snmp_community: 'public', snmp_version: 'v2c', snmp_port: 161, parent_id: null })
+const form = ref({ name: '', type: 'group', ip_address: '', mac_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, snmp_enabled: true, snmp_community: 'public', snmp_version: 'v2c', snmp_port: 161, parent_id: null })
 
 function collectDescendantDevices(node, result = []) {
   if (!node.children) return result
@@ -39,7 +39,7 @@ const portChildDevices = computed(() => {
 
 function openCreate(parentId) {
   editing.value = null
-  form.value = { name: '', type: 'group', ip_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, snmp_enabled: true, snmp_community: 'public', snmp_version: 'v2c', snmp_port: 161, parent_id: parentId }
+  form.value = { name: '', type: 'group', ip_address: '', mac_address: '', port: null, location: '', port_count: null, uplink_port: null, port_bindings: {}, snmp_enabled: true, snmp_community: 'public', snmp_version: 'v2c', snmp_port: 161, parent_id: parentId }
   dialogVisible.value = true
 }
 
@@ -49,6 +49,7 @@ function openEdit() {
     name: props.node.name,
     type: props.node.type,
     ip_address: props.node.ip_address || '',
+    mac_address: props.node.mac_address || '',
     port: props.node.port,
     location: props.node.location || '',
     port_count: props.node.port_count ?? null,
@@ -83,6 +84,7 @@ async function submit() {
     ...form.value,
     parent_id: parentId,
     ip_address: form.value.ip_address || null,
+    mac_address: form.value.mac_address || null,
     port: form.value.port || null,
     location: form.value.location || null,
     port_count: form.value.port_count,
@@ -269,6 +271,9 @@ onMounted(() => {
       </el-form-item>
       <el-form-item label="IP 地址">
         <el-input v-model="form.ip_address" placeholder="留空表示纯分组节点" />
+      </el-form-item>
+      <el-form-item label="MAC 地址">
+        <el-input v-model="form.mac_address" placeholder="如：AA:BB:CC:DD:EE:FF（可选）" />
       </el-form-item>
       <el-form-item label="TCP 端口">
         <el-input-number v-model="form.port" :min="1" :max="65535" placeholder="可选" />

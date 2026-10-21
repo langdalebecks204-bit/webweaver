@@ -382,3 +382,24 @@ describe('DeviceTree 节点ID展示', () => {
   })
 })
 
+describe('DeviceTree MAC地址编辑', () => {
+  it('编辑设备时回显并在提交时包含 mac_address', async () => {
+    const node = {
+      id: 10,
+      name: '边缘主机',
+      type: 'server',
+      ip_address: '192.168.1.100',
+      mac_address: 'AA:BB:CC:DD:EE:FF',
+      parent_id: null,
+      status: 'online',
+    }
+    const wrapper = mountTree('edit', node)
+    await wrapper.find('.dd').trigger('click')
+    await wrapper.findAll('.dlg button').find((b) => b.text() === '保存').trigger('click')
+    await flushPromises()
+    expect(updateMock).toHaveBeenCalledWith(10, expect.objectContaining({
+      mac_address: 'AA:BB:CC:DD:EE:FF',
+    }))
+  })
+})
+

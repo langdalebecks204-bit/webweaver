@@ -53,7 +53,7 @@ async function loadEdgeDiscovery() {
     const res = await topologyApi.edgeDiscover()
     const data = res.data || { direct_terminals: [], unmanaged_hubs: [], ap_clusters: [] }
     edgeResult.value = data
-    selectedDirect.value = data.direct_terminals.filter((dt) => dt.device_id)
+    selectedDirect.value = [...data.direct_terminals]
     hubSelections.value = data.unmanaged_hubs.map((hub) => ({
       ...hub,
       checked: true,
@@ -129,7 +129,11 @@ async function onApplyEdge() {
       port_num: h.port_num,
       port_name: h.port_name,
       device_ids: h.attached_devices.map((d) => d.device_id),
-      unregistered_macs: h.unregistered_assets.map((a) => a.mac),
+      unregistered_macs: h.unregistered_assets.map((a) => ({
+        mac: a.mac,
+        ip: a.ip || null,
+        name: a.suggested_name || (a.ip ? `终端 (${a.ip})` : `终端 (${a.mac})`),
+      })),
     }))
 
     const payload = {
@@ -293,14 +297,17 @@ function onOpen() {
                     <el-tag size="small" type="info" class="port-tag">{{ scope?.row?.port_name }}</el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="直连设备名称" min-width="140">
+                <el-table-column label="直连设备名称" min-width="160">
                   <template #default="scope">
                     <b>{{ scope?.row?.device_name }}</b>
+                    <el-tag v-if="!scope?.row?.device_id" size="small" type="success" style="margin-left: 6px">自动入库</el-tag>
                   </template>
                 </el-table-column>
                 <el-table-column label="IP / MAC 地址" min-width="180">
                   <template #default="scope">
-                    <div>{{ scope?.row?.ip_address || '-' }}</div>
+                    <div :style="{ color: scope?.row?.ip_address ? 'inherit' : 'var(--el-text-color-placeholder)' }">
+                      {{ scope?.row?.ip_address || '未匹配到IP' }}
+                    </div>
                     <div class="text-secondary">{{ scope?.row?.mac }}</div>
                   </template>
                 </el-table-column>
@@ -355,7 +362,7 @@ function onOpen() {
                     :key="'u-' + uIdx"
                     class="terminal-chip unreg"
                   >
-                    ➕ 未登记: {{ unreg.vendor }} ({{ unreg.mac }})
+                    ➕ {{ unreg.suggested_name || (unreg.ip ? `终端 (${unreg.ip})` : `终端 (${unreg.mac})`) }}
                   </span>
                 </div>
               </div>
