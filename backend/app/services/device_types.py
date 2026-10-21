@@ -8,6 +8,7 @@ BUILTIN_TYPES = [
     "group",
     "server",
     "switch",
+    "unmanaged_switch",
     "terminal",
     "camera",
     "nvr",
@@ -17,7 +18,6 @@ BUILTIN_TYPES = [
     "printer",
     "nas",
     "ups",
-    "unmanaged_switch",
 ]
 
 CUSTOM_TYPES_KEY = "custom_device_types"

@@ -10,6 +10,7 @@ def test_builtin_types_contains_new_ones():
 
 def test_unmanaged_switch_is_builtin():
     assert "unmanaged_switch" in dt.BUILTIN_TYPES
+    assert dt.BUILTIN_TYPES.index("unmanaged_switch") == dt.BUILTIN_TYPES.index("switch") + 1
 
 
 def test_custom_types_default_empty():

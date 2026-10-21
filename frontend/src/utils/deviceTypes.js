@@ -2,6 +2,7 @@ export const DEVICE_TYPE_LABELS = {
   group: '分组',
   server: '服务器',
   switch: '交换机',
+  unmanaged_switch: '非管理交换机',
   terminal: '终端',
   camera: '摄像头',
   nvr: 'NVR',
@@ -11,13 +12,13 @@ export const DEVICE_TYPE_LABELS = {
   printer: '打印机',
   nas: 'NAS',
   ups: 'UPS',
-  unmanaged_switch: '非管理型交换机',
 }
 
 export const DEVICE_TYPE_ICONS = {
   group: 'Folder',
   server: 'Monitor',
   switch: 'Connection',
+  unmanaged_switch: 'Connection',
   terminal: 'Cpu',
   camera: 'VideoCamera',
   nvr: 'Film',
@@ -27,7 +28,6 @@ export const DEVICE_TYPE_ICONS = {
   printer: 'Printer',
   nas: 'Files',
   ups: 'Lightning',
-  unmanaged_switch: 'Connection',
 }
 
 export const DEFAULT_TYPE_ICON = 'Monitor'
@@ -37,6 +37,7 @@ export const DEVICE_TYPE_GLYPHS = {
   group: '📁',
   server: '🖥️',
   switch: '🔀',
+  unmanaged_switch: '🔀',
   terminal: '💻',
   camera: '📷',
   nvr: '🎛️',
@@ -46,7 +47,6 @@ export const DEVICE_TYPE_GLYPHS = {
   printer: '🖨️',
   nas: '💾',
   ups: '🔋',
-  unmanaged_switch: '🔌',
 }
 
 export function typeGlyph(type) {
