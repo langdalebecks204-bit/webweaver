@@ -60,11 +60,37 @@ def _migrate_schema(db_engine=None) -> None:
                 conn.execute(text(f"ALTER TABLE devices ADD COLUMN {name} {ddl}"))
 
 
+def _migrate_terminal_names(db_engine=None) -> None:
+    """Migrate legacy '终端 (未知厂商)' terminal names to include the MAC address."""
+    from sqlalchemy import inspect, text
+
+    db_engine = db_engine or engine
+    inspector = inspect(db_engine)
+    if not inspector.has_table("devices"):
+        return
+    with db_engine.begin() as conn:
+        try:
+            rows = conn.execute(
+                text("SELECT id, name, mac_address FROM devices WHERE mac_address IS NOT NULL AND name LIKE '终端 (%未知厂商%)'")
+            ).fetchall()
+            for r in rows:
+                dev_id, old_name, mac = r[0], r[1], r[2]
+                if mac and "未知厂商" in old_name and mac not in old_name:
+                    new_name = f"终端 (未知厂商{mac})"
+                    conn.execute(
+                        text("UPDATE devices SET name = :new_name WHERE id = :dev_id"),
+                        {"new_name": new_name, "dev_id": dev_id},
+                    )
+        except Exception:
+            pass
+
+
 def init_db() -> None:
     from app.models import Device, ExternalTarget, ProbeRecord, Setting, User  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     _migrate_schema()
+    _migrate_terminal_names()
     seed_default_admin()
 
 

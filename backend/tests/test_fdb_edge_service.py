@@ -258,10 +258,10 @@ def test_apply_edge_topology_unregistered_direct_and_backfill():
         assert d2.ip_address == "192.168.1.102"
         assert d2.parent_id == sw.id
 
-        # 3. Verify direct terminal without IP
+        # 3. Verify direct terminal without IP (should include vendor + MAC)
         d3 = db.query(Device).filter_by(mac_address="33:44:55:66:77:88").first()
         assert d3 is not None
-        assert d3.name == "终端 (33:44:55:66:77:88)"
+        assert d3.name == "终端 (未知厂商33:44:55:66:77:88)"
         assert d3.ip_address is None
         assert d3.parent_id == sw.id
 
@@ -276,8 +276,22 @@ def test_apply_edge_topology_unregistered_direct_and_backfill():
 
         ht2 = db.query(Device).filter_by(mac_address="66:77:88:99:AA:BB").first()
         assert ht2 is not None
-        assert ht2.name == "终端 (66:77:88:99:AA:BB)"
+        assert ht2.name == "终端 (未知厂商66:77:88:99:AA:BB)"
         assert ht2.ip_address is None
         assert ht2.parent_id == hub.id
+
+
+def test_format_terminal_default_name():
+    from app.services.fdb_edge import format_terminal_default_name
+
+    # With IP
+    assert format_terminal_default_name("C8:A3:62:DF:93:0B", ip="192.168.1.50") == "终端 (192.168.1.50)"
+    # Without IP, unknown vendor
+    assert format_terminal_default_name("C8:A3:62:DF:93:0B", ip=None, vendor="未知厂商") == "终端 (未知厂商C8:A3:62:DF:93:0B)"
+    assert format_terminal_default_name("C8:A3:62:DF:93:0B", ip=None, vendor=None) == "终端 (未知厂商C8:A3:62:DF:93:0B)"
+    # Without IP, Chinese vendor
+    assert format_terminal_default_name("C8:A3:62:DF:93:0B", ip=None, vendor="华为") == "终端 (华为C8:A3:62:DF:93:0B)"
+    # Without IP, English vendor
+    assert format_terminal_default_name("C8:A3:62:DF:93:0B", ip=None, vendor="Apple") == "终端 (Apple C8:A3:62:DF:93:0B)"
 
 

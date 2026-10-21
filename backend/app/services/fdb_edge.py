@@ -46,6 +46,28 @@ def is_mobile_oui(vendor: Optional[str]) -> bool:
     return any(mv in v_lower for mv in MOBILE_VENDORS)
 
 
+def format_terminal_default_name(
+    mac: str, ip: Optional[str] = None, vendor: Optional[str] = None
+) -> str:
+    """Format terminal display/device name according to user specification:
+    - If IP is present: "终端 ({ip})"
+    - If IP is absent:
+      - If vendor is known: "终端 ({vendor}{mac})" (e.g. "终端 (未知厂商C8:A3:62:DF:93:0B)")
+      - Otherwise: "终端 ({mac})"
+    """
+    if ip:
+        return f"终端 ({ip})"
+
+    clean_mac = (mac or "").strip()
+    clean_vendor = (vendor or "未知厂商").strip()
+    if clean_vendor in ("", "-"):
+        clean_vendor = "未知厂商"
+
+    if clean_vendor.isascii():
+        return f"终端 ({clean_vendor} {clean_mac})"
+    return f"终端 ({clean_vendor}{clean_mac})"
+
+
 def get_network_ip_mac_table(db: Session, all_devices: List[Device]) -> Dict[str, str]:
     """Build a mapping of normalized MAC -> IP address from all available sources:
     1. Registered devices with both IP and MAC.
@@ -214,8 +236,7 @@ def discover_edge_topology(
                 else:
                     dev_id = None
                     dev_ip = matched_ip
-                    # 命名规则：如果有 IP 则显示 IP，如果没有 IP 则显示 MAC
-                    dev_name = f"终端 ({dev_ip})" if dev_ip else f"终端 ({mac})"
+                    dev_name = format_terminal_default_name(mac, dev_ip, vendor)
                     matched_by = "ip_mac_unregistered" if dev_ip else "fdb_unregistered"
                 
                 direct_terminals.append({
@@ -272,7 +293,7 @@ def discover_edge_topology(
                             "ip": matched_ip,
                             "vendor": v,
                             "is_random_mac": is_rand,
-                            "suggested_name": f"终端 ({matched_ip})" if matched_ip else f"终端 ({m})",
+                            "suggested_name": format_terminal_default_name(m, matched_ip, v),
                         })
 
                 total_macs = len(unique_entries)
@@ -367,10 +388,15 @@ def apply_edge_topology(
             # 新终端：自动创建并入库
             if not norm_mac:
                 continue
-            # 名字：如果没有 IP，就显示 MAC；如果有 IP，显示 IP
+            vendor = lookup_vendor(norm_mac)
             dev_name = dt.get("device_name")
-            if not dev_name or dev_name in ("未知设备",) or dev_name.startswith("设备 ("):
-                dev_name = f"终端 ({ip})" if ip else f"终端 ({norm_mac})"
+            if (
+                not dev_name
+                or dev_name in ("未知设备", "终端 (未知厂商)")
+                or dev_name.startswith("设备 (")
+                or ("未知厂商" in dev_name and norm_mac not in dev_name)
+            ):
+                dev_name = format_terminal_default_name(norm_mac, ip, vendor)
             
             dev = Device(
                 name=dev_name,
@@ -456,12 +482,15 @@ def apply_edge_topology(
             if not norm_mac:
                 continue
             ip = item_ip or mac_to_ip.get(norm_mac)
-            if item_name:
+            vendor = lookup_vendor(norm_mac)
+            if (
+                item_name
+                and item_name != "终端 (未知厂商)"
+                and not ("未知厂商" in item_name and norm_mac not in item_name)
+            ):
                 name = item_name
-            elif ip:
-                name = f"终端 ({ip})"
             else:
-                name = f"终端 ({norm_mac})"
+                name = format_terminal_default_name(norm_mac, ip, vendor)
 
             new_dev = Device(
                 name=name,
