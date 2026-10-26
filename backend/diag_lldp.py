@@ -72,6 +72,8 @@ def main():
     if_descrs = snmp_walk(ip, community, OID_IF_DESCR, timeout=1.5, max_entries=5)
     if not if_descrs:
         if_descrs = snmp_walk(ip, community, OID_IF_NAME, timeout=1.5, max_entries=5)
+    if not if_descrs:
+        if_descrs = snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.1", timeout=1.5, max_entries=5)
 
     if if_descrs:
         print(f"  [√] 成功！基础 SNMP 通信正常，读取到接口样本:")

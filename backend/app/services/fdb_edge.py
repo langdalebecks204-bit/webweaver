@@ -207,14 +207,17 @@ def discover_edge_topology(
             norm = normalize_mac(d.mac_address)
             if norm:
                 mac_to_dev[norm] = d
-                if d.type in ("switch", "router"):
+                if d.type in ("switch", "router", "gateway"):
                     core_macs.add(norm)
 
     # Build network-wide IP-MAC map
     mac_to_ip = get_network_ip_mac_table(db, all_devices)
 
-    # Filter target switches
-    switches = [d for d in all_devices if d.type == "switch" and d.snmp_enabled and d.ip_address]
+    # Filter target manageable devices (switches, routers, gateways)
+    switches = [
+        d for d in all_devices
+        if d.type in ("switch", "router", "gateway") and d.snmp_enabled and d.ip_address
+    ]
     if switch_ids:
         switches = [s for s in switches if s.id in switch_ids]
 
@@ -233,7 +236,7 @@ def discover_edge_topology(
                     t_id = b.get("target_id")
                     if t_id:
                         target = db.get(Device, t_id)
-                        if target and target.type in ("switch", "router"):
+                        if target and target.type in ("switch", "router", "gateway"):
                             try:
                                 skip_ports.add(int(p_str))
                             except ValueError:
@@ -467,7 +470,7 @@ def discover_edge_topology(
                             (d.parent_id == existing_hub.id or is_descendant_of(db, d.id, existing_hub.id))
                             and d.id not in seen_attached_ids
                             and d.id != existing_hub.id
-                            and d.type not in ("switch", "router", "unmanaged_switch")
+                            and d.type not in ("switch", "router", "gateway", "unmanaged_switch")
                         ):
                             seen_attached_ids.add(d.id)
                             attached_devices.append({
@@ -509,7 +512,7 @@ def discover_edge_topology(
                     else:
                         is_existing = False
                         hub_id = None
-                        suggested_name = f"{sw.name}_P{p_num}_分线交换机"
+                        suggested_name = f"{sw.name}_{p_name}_分线器" if sw.type in ("router", "gateway") else f"{sw.name}_P{p_num}_分线交换机"
 
                     unmanaged_hubs.append({
                         "switch_id": sw.id,
@@ -642,7 +645,9 @@ def apply_edge_topology(
         # and dev is not under an unmanaged switch
         dev_curr_p = db.get(Device, dev.parent_id) if dev.parent_id else None
         dev_is_under_unmanaged = bool(dev_curr_p and dev_curr_p.type == "unmanaged_switch")
-        if existing_port_hub is None and not dev_is_under_unmanaged and sw.port_count and 1 <= port_num <= sw.port_count:
+        if existing_port_hub is None and not dev_is_under_unmanaged:
+            if not sw.port_count or sw.port_count < port_num:
+                sw.port_count = max(port_num, sw.port_count or 0, 24)
             bindings = dict(sw.port_bindings or {})
             bindings[str(port_num)] = {
                 "target_id": dev.id,
@@ -693,18 +698,19 @@ def apply_edge_topology(
             if hub_name and hub.name != hub_name:
                 hub.name = hub_name
             hub.parent_id = sw.id
-            if sw.port_count and 1 <= port_num <= sw.port_count:
-                bindings = dict(sw.port_bindings or {})
-                curr_b = bindings.get(str(port_num))
-                if not curr_b or curr_b.get("target_id") != hub.id:
-                    bindings[str(port_num)] = {
-                        "target_id": hub.id,
-                        "target_port": 1,
-                        "cable_type": "copper",
-                        "rate": "1000M",
-                    }
-                    sw.port_bindings = bindings
-                    flag_modified(sw, "port_bindings")
+            if not sw.port_count or sw.port_count < port_num:
+                sw.port_count = max(port_num, sw.port_count or 0, 24)
+            bindings = dict(sw.port_bindings or {})
+            curr_b = bindings.get(str(port_num))
+            if not curr_b or curr_b.get("target_id") != hub.id:
+                bindings[str(port_num)] = {
+                    "target_id": hub.id,
+                    "target_port": 1,
+                    "cable_type": "copper",
+                    "rate": "1000M",
+                }
+                sw.port_bindings = bindings
+                flag_modified(sw, "port_bindings")
             reused_hubs_count += 1
         else:
             hub = Device(
@@ -720,16 +726,17 @@ def apply_edge_topology(
             db.flush()
             live_devices.append(hub)
 
-            if sw.port_count and 1 <= port_num <= sw.port_count:
-                bindings = dict(sw.port_bindings or {})
-                bindings[str(port_num)] = {
-                    "target_id": hub.id,
-                    "target_port": 1,
-                    "cable_type": "copper",
-                    "rate": "1000M",
-                }
-                sw.port_bindings = bindings
-                flag_modified(sw, "port_bindings")
+            if not sw.port_count or sw.port_count < port_num:
+                sw.port_count = max(port_num, sw.port_count or 0, 24)
+            bindings = dict(sw.port_bindings or {})
+            bindings[str(port_num)] = {
+                "target_id": hub.id,
+                "target_port": 1,
+                "cable_type": "copper",
+                "rate": "1000M",
+            }
+            sw.port_bindings = bindings
+            flag_modified(sw, "port_bindings")
             created_hubs_count += 1
 
         # Reparent existing devices under this Hub (PRESERVING MULTI-LEVEL HIERARCHY!)

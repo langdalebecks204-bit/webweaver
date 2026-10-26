@@ -283,13 +283,81 @@ def get_switch_base_mac(
     version: str = "v2c",
     timeout: float = 1.0,
 ) -> Optional[str]:
-    """Query dot1dBaseBridgeAddress (1.3.6.1.2.1.17.1.1.0) for switch Base MAC."""
+    """Query dot1dBaseBridgeAddress (1.3.6.1.2.1.17.1.1.0) or IF-MIB ifPhysAddress for switch/router Base MAC."""
+    # 1. Try Bridge-MIB dot1dBaseBridgeAddress
     val = snmp_get_scalar(ip, community, OID_DOT1D_BASE_BRIDGE_ADDRESS, port, version, timeout)
     if isinstance(val, (bytes, bytearray)) and len(val) == 6:
         return ":".join(f"{b:02X}" for b in val)
     elif isinstance(val, str):
-        return normalize_mac(val)
+        norm = normalize_mac(val)
+        if norm:
+            return norm
+
+    # 2. Fallback for routers: check IF-MIB ifPhysAddress (1.3.6.1.2.1.2.2.1.6)
+    # Check bridge/management interfaces first, then first valid physical unicast MAC
+    try:
+        descrs = snmp_walk(ip, community, OID_IF_DESCR, port, version, timeout, max_entries=50)
+        phys = snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.6", port, version, timeout, max_entries=50)
+        
+        bridge_mac = None
+        first_valid_mac = None
+        
+        for oid, raw_mac in phys.items():
+            mac_str = None
+            if isinstance(raw_mac, (bytes, bytearray)) and len(raw_mac) == 6:
+                mac_str = ":".join(f"{b:02X}" for b in raw_mac)
+            elif isinstance(raw_mac, str):
+                mac_str = normalize_mac(raw_mac)
+            
+            if not mac_str or mac_str in ("00:00:00:00:00:00", "FF:FF:FF:FF:FF:FF"):
+                continue
+            if mac_str.startswith("01:00:5E") or mac_str.startswith("33:33"):
+                continue
+                
+            idx_str = oid.strip(".").split(".")[-1]
+            d_name = _decode_bytes_str(descrs.get(f"{OID_IF_DESCR}.{idx_str}")).lower()
+            
+            # Prefer bridge or LAN aggregation interface (e.g. vmbr, bridge, lan_br, br)
+            if any(k in d_name for k in ("br", "bridge", "vmbr", "lan_br", "mgmt", "vlan")):
+                bridge_mac = mac_str
+                break
+            if not first_valid_mac:
+                first_valid_mac = mac_str
+                
+        if bridge_mac:
+            return bridge_mac
+        if first_valid_mac:
+            return first_valid_mac
+    except Exception:
+        pass
+
     return None
+
+
+def get_device_all_macs(
+    ip: str,
+    community: str = "public",
+    port: int = 161,
+    version: str = "v2c",
+    timeout: float = 1.0,
+) -> List[str]:
+    """Retrieve all physical interface MAC addresses of a switch or router via IF-MIB."""
+    all_macs: List[str] = []
+    try:
+        phys = snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.6", port, version, timeout, max_entries=100)
+        for _, raw_mac in phys.items():
+            mac_str = None
+            if isinstance(raw_mac, (bytes, bytearray)) and len(raw_mac) == 6:
+                mac_str = ":".join(f"{b:02X}" for b in raw_mac)
+            elif isinstance(raw_mac, str):
+                mac_str = normalize_mac(raw_mac)
+            if mac_str and mac_str not in ("00:00:00:00:00:00", "FF:FF:FF:FF:FF:FF"):
+                if not mac_str.startswith("01:00:5E") and not mac_str.startswith("33:33"):
+                    if mac_str not in all_macs:
+                        all_macs.append(mac_str)
+    except Exception:
+        pass
+    return all_macs
 
 
 def get_device_fdb_table(
@@ -299,11 +367,13 @@ def get_device_fdb_table(
     version: str = "v2c",
     timeout: float = 1.0,
 ) -> List[Dict[str, Any]]:
-    """Walk Bridge-MIB dot1dTpFdbTable (1.3.6.1.2.1.17.4.3.1.2) and return learned MAC -> Port mappings."""
+    """Walk Bridge-MIB dot1dTpFdbTable (1.3.6.1.2.1.17.4.3.1.2) or Q-BRIDGE-MIB dot1qTpFdbPort and return learned MAC -> Port mappings."""
     # 1. Walk local port mapping
     loc_ports_raw = snmp_walk(ip, community, OID_IF_DESCR, port, version, timeout, max_entries=100)
     if not loc_ports_raw:
         loc_ports_raw = snmp_walk(ip, community, OID_IF_NAME, port, version, timeout, max_entries=100)
+    if not loc_ports_raw:
+        loc_ports_raw = snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.1", port, version, timeout, max_entries=100)
 
     loc_ports: Dict[int, str] = {}
     for oid, val in loc_ports_raw.items():
@@ -324,8 +394,14 @@ def get_device_fdb_table(
         except Exception:
             pass
 
-    # 3. FDB Port table (1.3.6.1.2.1.17.4.3.1.2)
+    # 3. FDB Port table (1.3.6.1.2.1.17.4.3.1.2 - RFC 1493)
     fdb_raw = snmp_walk(ip, community, OID_DOT1D_TP_FDB_PORT, port, version, timeout, max_entries=500)
+    if not fdb_raw:
+        # Fallback to Q-BRIDGE-MIB dot1qTpFdbPort (1.3.6.1.2.1.17.7.1.2.2.1.2 - RFC 2674)
+        dot1q_raw = snmp_walk(ip, community, "1.3.6.1.2.1.17.7.1.2.2.1.2", port, version, timeout, max_entries=500)
+        if dot1q_raw:
+            fdb_raw = dot1q_raw
+
     # 4. FDB Status (1.3.6.1.2.1.17.4.3.1.3): 3=learned, 4=self, 5=mgmt
     status_raw = snmp_walk(ip, community, OID_DOT1D_TP_FDB_STATUS, port, version, timeout, max_entries=500)
 
@@ -416,6 +492,24 @@ def discover_all_lldp_topology(db: Session) -> Dict[str, Any]:
             norm = normalize_mac(d["mac_address"])
             if norm:
                 mac_to_device[norm] = d
+
+    # Also map all physical interface MACs for switches and routers to support multi-port devices
+    device_dict_by_id = {d["id"]: d for d in device_dicts}
+    for sw in switches:
+        if sw.ip_address:
+            try:
+                comm = sw.snmp_community or "public"
+                port = sw.snmp_port or 161
+                ver = sw.snmp_version or "v2c"
+                if_macs = get_device_all_macs(sw.ip_address, comm, port, ver)
+                target_d = device_dict_by_id.get(sw.id)
+                if target_d:
+                    for m in if_macs:
+                        norm = normalize_mac(m)
+                        if norm and norm not in mac_to_device:
+                            mac_to_device[norm] = target_d
+            except Exception:
+                pass
 
     raw_observations = []
     unmatched_neighbors = []
@@ -540,8 +634,10 @@ def apply_lldp_topology(
         s_port_num = extract_port_number(s_port_raw)
         t_port_num = extract_port_number(t_port_raw)
 
-        # Update Source port_bindings if source has port_count and port_num
-        if s_port_num and dev_source.port_count and 1 <= s_port_num <= dev_source.port_count:
+        # Update Source port_bindings if source has port_num
+        if s_port_num:
+            if not dev_source.port_count or dev_source.port_count < s_port_num:
+                dev_source.port_count = max(s_port_num, dev_source.port_count or 0, 24)
             curr_b = dict(dev_source.port_bindings or {})
             curr_b[str(s_port_num)] = {
                 "target_id": t_id,
@@ -551,8 +647,10 @@ def apply_lldp_topology(
             dev_source.port_bindings = curr_b
             applied_count += 1
 
-        # Update Target port_bindings if target has port_count and port_num
-        if t_port_num and dev_target.port_count and 1 <= t_port_num <= dev_target.port_count:
+        # Update Target port_bindings if target has port_num
+        if t_port_num:
+            if not dev_target.port_count or dev_target.port_count < t_port_num:
+                dev_target.port_count = max(t_port_num, dev_target.port_count or 0, 24)
             curr_b = dict(dev_target.port_bindings or {})
             curr_b[str(t_port_num)] = {
                 "target_id": s_id,

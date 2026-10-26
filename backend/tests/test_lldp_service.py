@@ -242,3 +242,40 @@ def test_discover_all_lldp_topology_with_fdb_fallback(monkeypatch):
         assert hk["remote_sys_name"] == "Hikvision"
 
 
+def test_get_switch_base_mac_router_fallback(monkeypatch):
+    from app.services.lldp import get_switch_base_mac, get_device_all_macs
+
+    # Simulate Bridge-MIB returning None (router), but IF-MIB returning interfaces
+    monkeypatch.setattr("app.services.lldp.snmp_get_scalar", lambda *args, **kwargs: None)
+    
+    mock_descrs = {
+        "1.3.6.1.2.1.2.2.1.2.1": b"vmbr0",
+        "1.3.6.1.2.1.2.2.1.2.16": b"LAN4",
+        "1.3.6.1.2.1.2.2.1.2.17": b"LAN_BR",
+    }
+    mock_phys = {
+        "1.3.6.1.2.1.2.2.1.6.1": b"\xBC\x24\x11\x2C\xAA\x61",
+        "1.3.6.1.2.1.2.2.1.6.16": b"\x60\xBE\xB4\x1A\x58\x50",
+        "1.3.6.1.2.1.2.2.1.6.17": b"\x60\xBE\xB4\x1A\x58\x4D",
+    }
+
+    def mock_walk(ip, comm, oid, *args, **kwargs):
+        if "1.3.6.1.2.1.2.2.1.6" in oid:
+            return mock_phys
+        if "1.3.6.1.2.1.2.2.1.2" in oid:
+            return mock_descrs
+        return {}
+
+    monkeypatch.setattr("app.services.lldp.snmp_walk", mock_walk)
+
+    base_mac = get_switch_base_mac("10.0.25.1", "public")
+    # Should resolve to bridge interface (LAN_BR or vmbr0)
+    assert base_mac in ("60:BE:B4:1A:58:4D", "BC:24:11:2C:AA:61")
+
+    all_macs = get_device_all_macs("10.0.25.1", "public")
+    assert len(all_macs) == 3
+    assert "60:BE:B4:1A:58:50" in all_macs
+    assert "60:BE:B4:1A:58:4D" in all_macs
+
+
+

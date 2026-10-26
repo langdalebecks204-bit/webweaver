@@ -182,13 +182,13 @@ function onOpen() {
     @open="onOpen"
   >
     <el-tabs v-model="activeTab" type="card" @tab-change="onTabChange">
-      <!-- Tab 1: 交换机骨干互联 -->
-      <el-tab-pane label="交换机骨干互联 (LLDP/Bridge)" name="backbone">
+      <!-- Tab 1: 交换机/路由器骨干互联 -->
+      <el-tab-pane label="主干物理互联 (LLDP/Bridge)" name="backbone">
         <div v-loading="loading" class="tab-pane-content">
           <!-- Overview stats -->
           <div class="stats-row">
             <div class="stat-badge">
-              <span class="label">扫描交换机：</span>
+              <span class="label">扫描受管设备：</span>
               <span class="val">{{ scanResult.scanned_devices_count }} 台</span>
             </div>
             <div class="stat-badge highlight">
@@ -299,7 +299,7 @@ function onOpen() {
                 @selection-change="handleDirectSelectionChange"
               >
                 <el-table-column type="selection" width="45" />
-                <el-table-column label="交换机 & 端口" min-width="160">
+                <el-table-column label="设备 & 端口" min-width="160">
                   <template #default="scope">
                     <span class="dev-name">{{ scope?.row?.switch_name }}</span>
                     <el-tag size="small" type="info" class="port-tag">{{ scope?.row?.port_name }}</el-tag>

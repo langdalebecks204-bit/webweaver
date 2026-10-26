@@ -618,6 +618,50 @@ def test_multilevel_unmanaged_switch_hierarchy_preserved(monkeypatch):
         assert sw.port_bindings["4"]["target_id"] == hub1.id
 
 
+def test_discover_edge_topology_supports_router(monkeypatch):
+    from app.database import SessionLocal, init_db
+    from app.models import Device
+    from app.services.fdb_edge import discover_edge_topology
+
+    init_db()
+    with SessionLocal() as db:
+        # Create a Router with SNMP enabled
+        router = Device(
+            name="Main-RouterOS",
+            type="router",
+            ip_address="10.0.25.1",
+            mac_address="60:BE:B4:1A:58:4D",
+            snmp_enabled=True,
+            port_count=16,
+        )
+        # Create an attached device
+        nvr = Device(
+            name="Hikvision-NVR",
+            type="server",
+            ip_address="172.16.22.2",
+            mac_address="CC:13:F3:08:D8:F6",
+            snmp_enabled=False,
+        )
+        db.add_all([router, nvr])
+        db.commit()
+
+        # Mock FDB for RouterOS: port LAN3 learns NVR
+        mock_fdb = [
+            {"local_port_num": 3, "local_port_name": "LAN3", "learned_mac": "CC:13:F3:08:D8:F6"},
+        ]
+        monkeypatch.setattr("app.services.lldp.get_device_fdb_table", lambda *args, **kwargs: mock_fdb)
+
+        # Run discover_edge_topology with router
+        disc = discover_edge_topology(db, switch_ids=[router.id])
+        assert len(disc["direct_terminals"]) == 1
+        dt = disc["direct_terminals"][0]
+        assert dt["switch_id"] == router.id
+        assert dt["switch_name"] == "Main-RouterOS"
+        assert dt["port_name"] == "LAN3"
+        assert dt["device_name"] == "Hikvision-NVR"
+
+
+
 
 
 
