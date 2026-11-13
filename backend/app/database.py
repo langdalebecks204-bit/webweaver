@@ -85,12 +85,32 @@ def _migrate_terminal_names(db_engine=None) -> None:
             pass
 
 
+def _migrate_terminal_types(db_engine=None) -> None:
+    """Migrate auto-discovered edge terminals that were incorrectly assigned as 'server' to 'terminal'."""
+    from sqlalchemy import inspect, text
+
+    db_engine = db_engine or engine
+    inspector = inspect(db_engine)
+    if not inspector.has_table("devices"):
+        return
+    with db_engine.begin() as conn:
+        try:
+            conn.execute(
+                text(
+                    "UPDATE devices SET type = 'terminal' WHERE type = 'server' AND (name LIKE '终端 (%%' OR name LIKE '终端(%%')"
+                )
+            )
+        except Exception:
+            pass
+
+
 def init_db() -> None:
     from app.models import Device, ExternalTarget, ProbeRecord, Setting, User  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     _migrate_schema()
     _migrate_terminal_names()
+    _migrate_terminal_types()
     seed_default_admin()
 
 

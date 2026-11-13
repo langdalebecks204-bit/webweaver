@@ -255,6 +255,7 @@ def test_apply_edge_topology_unregistered_direct_and_backfill():
         d2 = db.query(Device).filter_by(mac_address="22:33:44:55:66:77").first()
         assert d2 is not None
         assert d2.name == "终端 (192.168.1.102)"
+        assert d2.type == "terminal"
         assert d2.ip_address == "192.168.1.102"
         assert d2.parent_id == sw.id
 
@@ -262,6 +263,7 @@ def test_apply_edge_topology_unregistered_direct_and_backfill():
         d3 = db.query(Device).filter_by(mac_address="33:44:55:66:77:88").first()
         assert d3 is not None
         assert d3.name == "终端 (未知厂商33:44:55:66:77:88)"
+        assert d3.type == "terminal"
         assert d3.ip_address is None
         assert d3.parent_id == sw.id
 
@@ -271,12 +273,14 @@ def test_apply_edge_topology_unregistered_direct_and_backfill():
         ht1 = db.query(Device).filter_by(mac_address="55:66:77:88:99:AA").first()
         assert ht1 is not None
         assert ht1.name == "终端 (192.168.1.150)"
+        assert ht1.type == "terminal"
         assert ht1.ip_address == "192.168.1.150"
         assert ht1.parent_id == hub.id
 
         ht2 = db.query(Device).filter_by(mac_address="66:77:88:99:AA:BB").first()
         assert ht2 is not None
         assert ht2.name == "终端 (未知厂商66:77:88:99:AA:BB)"
+        assert ht2.type == "terminal"
         assert ht2.ip_address is None
         assert ht2.parent_id == hub.id
 

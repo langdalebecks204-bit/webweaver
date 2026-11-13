@@ -631,7 +631,7 @@ def apply_edge_topology(
 
             dev = Device(
                 name=dev_name,
-                type="server",
+                type="terminal",
                 ip_address=ip,
                 mac_address=norm_mac,
                 parent_id=target_parent_id,
@@ -802,7 +802,7 @@ def apply_edge_topology(
 
                 new_dev = Device(
                     name=name,
-                    type="server",
+                    type="terminal",
                     ip_address=ip,
                     mac_address=norm_mac,
                     parent_id=hub.id,
