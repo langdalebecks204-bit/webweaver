@@ -167,5 +167,29 @@ describe('treeToGraph', () => {
         expect(n.fy).toBeUndefined()
       })
     })
+
+    it('存在环形或双向链接时不会死循环，并正常分配所有节点坐标', () => {
+      const cyclicNodes = [
+        { id: 10, name: '交换机A', type: 'switch' },
+        { id: 20, name: '交换机B', type: 'switch' },
+        { id: 30, name: '交换机C', type: 'switch' },
+      ]
+      const cyclicLinks = [
+        { source: 10, target: 20 },
+        { source: 20, target: 30 },
+        { source: 30, target: 10 },
+        { source: 20, target: 10 }, // bidirectional edge
+      ]
+
+      expect(() => {
+        applyVisioHierarchicalLayout(cyclicNodes, cyclicLinks)
+      }).not.toThrow()
+
+      for (const n of cyclicNodes) {
+        expect(Number.isFinite(n.fx)).toBe(true)
+        expect(Number.isFinite(n.fy)).toBe(true)
+        expect(n.visioDepth).toBeGreaterThanOrEqual(0)
+      }
+    })
   })
 })

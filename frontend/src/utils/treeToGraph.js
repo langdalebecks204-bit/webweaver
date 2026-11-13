@@ -230,13 +230,15 @@ export function applyVisioHierarchicalLayout(nodes, links) {
   // Identify root nodes (nodes without parent in links)
   let roots = nodes.filter((n) => !parentMap.has(n.id)).map((n) => n.id)
   if (roots.length === 0 && nodes.length > 0) {
-    roots = [nodes[0].id]
+    const coreCandidate = nodes.find((n) => n.role === 'gateway' || n.role === 'core')
+    roots = [coreCandidate ? coreCandidate.id : nodes[0].id]
   }
 
+  const spanningTreeChildren = new Map(nodes.map((n) => [n.id, []]))
   const depthMap = new Map()
   const visited = new Set()
 
-  // BFS to assign depths
+  // BFS to assign depths and build an acyclic spanning tree
   const queue = []
   for (const rId of roots) {
     depthMap.set(rId, 0)
@@ -252,26 +254,44 @@ export function applyVisioHierarchicalLayout(nodes, links) {
       if (!visited.has(cId)) {
         visited.add(cId)
         depthMap.set(cId, d + 1)
+        spanningTreeChildren.get(currId).push(cId)
         queue.push(cId)
       }
     }
   }
 
-  // Handle any remaining unvisited nodes
+  // Handle any remaining unvisited nodes (e.g. disconnected components or isolated cycles)
   for (const n of nodes) {
     if (!visited.has(n.id)) {
       depthMap.set(n.id, 1)
       visited.add(n.id)
       roots.push(n.id)
+      queue.push(n.id)
+      while (queue.length > 0) {
+        const currId = queue.shift()
+        const d = depthMap.get(currId) || 1
+        const children = childrenMap.get(currId) || []
+        for (const cId of children) {
+          if (!visited.has(cId)) {
+            visited.add(cId)
+            depthMap.set(cId, d + 1)
+            spanningTreeChildren.get(currId).push(cId)
+            queue.push(cId)
+          }
+        }
+      }
     }
   }
 
-  // Calculate subtree widths
+  // Calculate subtree widths using spanningTreeChildren with recursion guard
   const widthMap = new Map()
   const NODE_MIN_WIDTH = 130
+  const calcVisited = new Set()
 
   function calcSubtreeWidth(id) {
-    const children = childrenMap.get(id) || []
+    if (calcVisited.has(id)) return widthMap.get(id) || NODE_MIN_WIDTH
+    calcVisited.add(id)
+    const children = spanningTreeChildren.get(id) || []
     if (children.length === 0) {
       widthMap.set(id, NODE_MIN_WIDTH)
       return NODE_MIN_WIDTH
@@ -295,7 +315,7 @@ export function applyVisioHierarchicalLayout(nodes, links) {
     const x = (left + right) / 2
     xMap.set(id, x)
 
-    const children = childrenMap.get(id) || []
+    const children = spanningTreeChildren.get(id) || []
     if (children.length === 0) return
 
     let curLeft = left

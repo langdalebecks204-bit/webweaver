@@ -5,12 +5,17 @@ import { reactive } from 'vue'
 
 let fgMock
 const createMock = vi.hoisted(() => vi.fn())
+const exportMock = vi.hoisted(() => vi.fn().mockResolvedValue(true))
 let lastCallWasNew
 
 vi.mock('force-graph', () => ({ default: createMock }))
 
 vi.mock('../../api/devices', () => ({
   getDeviceSnmpInterfaces: vi.fn().mockResolvedValue({ data: { interfaces: [] } }),
+}))
+
+vi.mock('../../utils/exportTopologyImage', () => ({
+  exportFullTopologyImage: exportMock,
 }))
 
 
@@ -40,6 +45,9 @@ describe('TopologyView', () => {
   let wrapper
   beforeEach(() => {
     vi.clearAllMocks()
+    if (typeof localStorage !== 'undefined') {
+      localStorage.clear()
+    }
     treeMock.splice(0, treeMock.length, {
       id: 1,
       name: '机房A',
@@ -391,5 +399,117 @@ describe('TopologyView', () => {
     expect(wrapper.vm.viewMode).toBe('classic-visio')
     expect(localStorage.getItem('weaver_topology_view_mode')).toBe('classic-visio')
     expect(fgMock.backgroundColor).toHaveBeenCalledWith('#f8fafc')
+  })
+
+  it('点击导出高清图片按钮调用 exportFullTopologyImage', async () => {
+    wrapper = mount(TopologyView, {
+      global: {
+        stubs: {
+          ElSlider: true,
+          ElSwitch: true,
+          ElRadioGroup: true,
+          ElRadioButton: true,
+          ElButton: {
+            template: '<button class="el-btn-stub"><slot /></button>',
+          },
+          LldpDiscoveryModal: true,
+        },
+      },
+    })
+    await flushPromises()
+    exportMock.mockClear()
+    const exportBtn = wrapper.findAll('.el-btn-stub').find((b) => b.text().includes('导出图片'))
+    expect(exportBtn).toBeTruthy()
+    await exportBtn.trigger('click')
+    await flushPromises()
+    expect(exportMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('在经典 Visio 模式下后台数据刷新重新应用层级布局', async () => {
+    wrapper = mount(TopologyView, {
+      global: {
+        stubs: {
+          ElSlider: true,
+          ElSwitch: true,
+          ElRadioGroup: true,
+          ElRadioButton: true,
+          ElButton: true,
+          LldpDiscoveryModal: true,
+        },
+      },
+    })
+    await flushPromises()
+    wrapper.vm.onViewModeChange('classic-visio')
+    await flushPromises()
+
+    // Trigger syncGraphData
+    wrapper.vm.syncGraphData()
+    const currentNodes = fgMock.graphData().nodes
+    expect(currentNodes.length).toBeGreaterThan(0)
+    for (const n of currentNodes) {
+      expect(Number.isFinite(n.fx)).toBe(true)
+      expect(Number.isFinite(n.fy)).toBe(true)
+    }
+  })
+
+  it('端口标签在经典 Visio 模式与暗黑霓虹模式下使用适配色彩', async () => {
+    wrapper = mount(TopologyView, {
+      global: {
+        stubs: {
+          ElSlider: true,
+          ElSwitch: true,
+          ElRadioGroup: true,
+          ElRadioButton: true,
+          ElButton: true,
+          LldpDiscoveryModal: true,
+        },
+      },
+    })
+    await flushPromises()
+    const drawFn = fgMock.linkCanvasObject.mock.calls[0][0]
+    expect(typeof drawFn).toBe('function')
+
+    const fillStyles = []
+    const strokeStyles = []
+    const ctxMock = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      measureText: vi.fn(() => ({ width: 20 })),
+      fillRect: vi.fn(),
+      strokeRect: vi.fn(),
+      fillText: vi.fn(),
+      font: '',
+      textAlign: '',
+      textBaseline: '',
+      lineWidth: 1,
+      set fillStyle(val) {
+        fillStyles.push(val)
+      },
+      set strokeStyle(val) {
+        strokeStyles.push(val)
+      },
+    }
+
+    const testLink = {
+      source: { x: 0, y: 0 },
+      target: { x: 100, y: 100 },
+      source_port: 'GE1/0/1',
+      target_port: 'GE1/0/2',
+    }
+
+    // Default dark-neon mode
+    wrapper.vm.showPortLabels = true
+    drawFn(testLink, ctxMock)
+    expect(fillStyles).toContain('rgba(15, 23, 42, 0.85)')
+    expect(strokeStyles).toContain('#38bdf8')
+
+    // Switch to classic-visio mode
+    wrapper.vm.viewMode = 'classic-visio'
+    fillStyles.length = 0
+    strokeStyles.length = 0
+    drawFn(testLink, ctxMock)
+    expect(fillStyles).toContain('rgba(255, 255, 255, 0.95)')
+    expect(strokeStyles).toContain('#cbd5e1')
+    expect(fillStyles).toContain('#334155')
   })
 })

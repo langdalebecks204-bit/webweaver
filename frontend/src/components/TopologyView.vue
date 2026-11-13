@@ -284,6 +284,13 @@ function drawLinkPortLabels(link, ctx) {
   const tPort = link.target_port
   if (!sPort && !tPort) return
 
+  const isVisio = viewMode.value === 'classic-visio'
+  const pillBg = isVisio ? 'rgba(255, 255, 255, 0.95)' : 'rgba(15, 23, 42, 0.85)'
+  const sStroke = isVisio ? '#cbd5e1' : '#38bdf8'
+  const sText = isVisio ? '#334155' : '#38bdf8'
+  const tStroke = isVisio ? '#cbd5e1' : '#34d399'
+  const tText = isVisio ? '#334155' : '#34d399'
+
   ctx.save()
   ctx.font = '9px monospace'
   ctx.textAlign = 'center'
@@ -293,12 +300,12 @@ function drawLinkPortLabels(link, ctx) {
     const px = s.x + (t.x - s.x) * 0.22
     const py = s.y + (t.y - s.y) * 0.22
     const textWidth = ctx.measureText(sPort).width
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
+    ctx.fillStyle = pillBg
     ctx.fillRect(px - textWidth / 2 - 3, py - 6, textWidth + 6, 12)
-    ctx.strokeStyle = '#38bdf8'
+    ctx.strokeStyle = sStroke
     ctx.lineWidth = 0.8
     ctx.strokeRect(px - textWidth / 2 - 3, py - 6, textWidth + 6, 12)
-    ctx.fillStyle = '#38bdf8'
+    ctx.fillStyle = sText
     ctx.fillText(sPort, px, py)
   }
 
@@ -306,12 +313,12 @@ function drawLinkPortLabels(link, ctx) {
     const px = s.x + (t.x - s.x) * 0.78
     const py = s.y + (t.y - s.y) * 0.78
     const textWidth = ctx.measureText(tPort).width
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
+    ctx.fillStyle = pillBg
     ctx.fillRect(px - textWidth / 2 - 3, py - 6, textWidth + 6, 12)
-    ctx.strokeStyle = '#34d399'
+    ctx.strokeStyle = tStroke
     ctx.lineWidth = 0.8
     ctx.strokeRect(px - textWidth / 2 - 3, py - 6, textWidth + 6, 12)
-    ctx.fillStyle = '#34d399'
+    ctx.fillStyle = tText
     ctx.fillText(tPort, px, py)
   }
 
@@ -356,6 +363,9 @@ const NODE_FIELDS = ['name', 'type', 'status', 'latency_ms', 'ip_address', 'val'
 
 function syncGraphData() {
   if (!fg || !graphData.value.nodes.length) return
+  if (viewMode.value === 'classic-visio') {
+    applyVisioHierarchicalLayout(graphData.value.nodes, graphData.value.links)
+  }
   const prevNodes = fg.graphData().nodes || []
   const byId = new Map(prevNodes.map((n) => [n.id, n]))
   const nodes = graphData.value.nodes.map((n) => {
@@ -427,8 +437,12 @@ onBeforeUnmount(() => {
 async function onExportImage() {
   if (!graphData.value.nodes.length) return
   const success = await exportFullTopologyImage(graphData.value.nodes, graphData.value.links)
-  if (success && typeof ElMessage !== 'undefined') {
-    ElMessage.success?.('拓扑高清图片已成功生成并下载')
+  if (typeof ElMessage !== 'undefined') {
+    if (success) {
+      ElMessage.success?.('拓扑高清图片已成功生成并下载')
+    } else {
+      ElMessage.error?.('导出拓扑高清图片失败')
+    }
   }
 }
 </script>

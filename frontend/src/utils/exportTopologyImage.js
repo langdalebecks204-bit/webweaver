@@ -192,7 +192,9 @@ export async function exportFullTopologyImage(nodes, links, options = {}) {
   }
 
   // 5. Trigger download
-  const dateStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
+  const now = new Date()
+  const pad = (num) => String(num).padStart(2, '0')
+  const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
   const filename = options.filename || `WebWeaver_Topology_Visio_${dateStr}.png`
 
   try {
