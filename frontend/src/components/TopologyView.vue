@@ -7,6 +7,8 @@ import { treeToGraph, applyVisioHierarchicalLayout } from '../utils/treeToGraph'
 import { getDeviceSnmpInterfaces } from '../api/devices'
 import { SPEED_COLORS, getLinkColor } from '../utils/topologyLinks'
 import { getVisioCanvasImage, preloadAllVisioCanvasImages } from '../utils/visioIcons'
+import { exportFullTopologyImage } from '../utils/exportTopologyImage'
+import { ElMessage } from 'element-plus'
 import LldpDiscoveryModal from './LldpDiscoveryModal.vue'
 
 const store = useDevicesStore()
@@ -421,6 +423,14 @@ onBeforeUnmount(() => {
     fg = null
   }
 })
+
+async function onExportImage() {
+  if (!graphData.value.nodes.length) return
+  const success = await exportFullTopologyImage(graphData.value.nodes, graphData.value.links)
+  if (success && typeof ElMessage !== 'undefined') {
+    ElMessage.success?.('拓扑高清图片已成功生成并下载')
+  }
+}
 </script>
 
 <template>
@@ -473,6 +483,14 @@ onBeforeUnmount(() => {
           @click="fetchSnmpLinkSpeeds"
         >
           刷新链路
+        </el-button>
+
+        <el-button
+          size="small"
+          class="export-btn"
+          @click="onExportImage"
+        >
+          📷 导出图片
         </el-button>
 
         <a v-if="isFullscreen" class="back-home" href="#" @click.prevent="backHome">← 返回主页</a>
