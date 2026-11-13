@@ -3,7 +3,12 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ForceGraph from 'force-graph'
 import { useDevicesStore } from '../stores/devices'
 import { typeGlyph } from '../utils/deviceTypes'
-import { treeToGraph, applyVisioHierarchicalLayout } from '../utils/treeToGraph'
+import {
+  treeToGraph,
+  applyVisioHierarchicalLayout,
+  DEFAULT_INFRASTRUCTURE_TYPES,
+  TERMINAL_TYPES,
+} from '../utils/treeToGraph'
 import { getDeviceSnmpInterfaces } from '../api/devices'
 import { SPEED_COLORS, getLinkColor } from '../utils/topologyLinks'
 import { getVisioCanvasImage, preloadAllVisioCanvasImages } from '../utils/visioIcons'
@@ -48,7 +53,63 @@ function backHome() {
   emit('back-home')
 }
 
-const graphData = computed(() => treeToGraph(store.tree))
+const ALL_FILTERABLE_TYPES = [
+  { value: 'switch', label: '交换机' },
+  { value: 'unmanaged_switch', label: '非管理交换机' },
+  { value: 'router', label: '路由器' },
+  { value: 'firewall', label: '防火墙' },
+  { value: 'ap', label: '无线AP' },
+  { value: 'server', label: '服务器' },
+  { value: 'nas', label: 'NAS存储' },
+  { value: 'nvr', label: 'NVR监控' },
+  { value: 'ups', label: 'UPS电源' },
+  { value: 'terminal', label: '电脑终端' },
+  { value: 'camera', label: '摄像头' },
+  { value: 'printer', label: '打印机' },
+]
+
+function loadSavedVisioTypes() {
+  if (typeof localStorage === 'undefined') return [...DEFAULT_INFRASTRUCTURE_TYPES]
+  const saved = localStorage.getItem('weaver_topology_visio_types')
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    } catch (_) {}
+  }
+  return [...DEFAULT_INFRASTRUCTURE_TYPES]
+}
+
+const visioDeviceTypes = ref(loadSavedVisioTypes())
+
+function onVisioTypesChange() {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('weaver_topology_visio_types', JSON.stringify(visioDeviceTypes.value))
+  }
+}
+
+const showTerminals = computed({
+  get() {
+    return TERMINAL_TYPES.some((t) => visioDeviceTypes.value.includes(t))
+  },
+  set(val) {
+    if (val) {
+      for (const t of TERMINAL_TYPES) {
+        if (!visioDeviceTypes.value.includes(t)) {
+          visioDeviceTypes.value.push(t)
+        }
+      }
+    } else {
+      visioDeviceTypes.value = visioDeviceTypes.value.filter((t) => !TERMINAL_TYPES.includes(t))
+    }
+    onVisioTypesChange()
+  },
+})
+
+const graphData = computed(() => {
+  const allowed = viewMode.value === 'classic-visio' ? visioDeviceTypes.value : null
+  return treeToGraph(store.tree, { allowedTypes: allowed })
+})
 
 const STATUS_COLORS = {
   online: '#10b981',
@@ -471,6 +532,30 @@ async function onExportImage() {
         <span class="label">显示端口</span>
         <el-switch v-model="showPortLabels" />
 
+        <template v-if="viewMode === 'classic-visio'">
+          <span class="label">显示终端</span>
+          <el-switch v-model="showTerminals" />
+
+          <span class="label">设备筛选</span>
+          <el-select
+            v-model="visioDeviceTypes"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            placeholder="筛选类型"
+            size="small"
+            class="type-filter-select"
+            @change="onVisioTypesChange"
+          >
+            <el-option
+              v-for="item in ALL_FILTERABLE_TYPES"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </template>
+
         <div class="legend-group">
           <span class="legend-item"><span class="legend-dot offline" />离线</span>
           <span class="legend-item"><span class="legend-dot speed-100m" />百兆</span>
@@ -592,6 +677,9 @@ async function onExportImage() {
 .topo-toolbar .font-slider {
   width: 140px;
   margin: 0 8px;
+}
+.type-filter-select {
+  width: 130px;
 }
 .legend-group {
   display: flex;

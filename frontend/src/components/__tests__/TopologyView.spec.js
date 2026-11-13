@@ -512,4 +512,81 @@ describe('TopologyView', () => {
     expect(strokeStyles).toContain('#cbd5e1')
     expect(fillStyles).toContain('#334155')
   })
+
+  it('在经典 Visio 模式下默认隐藏终端设备，开启 showTerminals 后可恢复展示', async () => {
+    treeMock.splice(0, treeMock.length, {
+      id: 1,
+      name: '核心机房',
+      type: 'group',
+      parent_id: null,
+      children: [
+        {
+          id: 2,
+          name: '核心交换机',
+          type: 'switch',
+          parent_id: 1,
+          children: [
+            { id: 3, name: '电脑A', type: 'terminal', parent_id: 2, children: [] },
+            { id: 4, name: '接入SW', type: 'switch', parent_id: 2, children: [] },
+          ],
+        },
+      ],
+    })
+
+    wrapper = mount(TopologyView, {
+      global: {
+        stubs: {
+          ElSlider: true,
+          ElSwitch: true,
+          ElRadioGroup: true,
+          ElRadioButton: true,
+          ElButton: true,
+          ElSelect: true,
+          ElOption: true,
+          LldpDiscoveryModal: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    // 默认暗黑霓虹模式下全部显示（包含电脑A）
+    expect(wrapper.vm.graphData.nodes.map((n) => n.id)).toContain(3)
+
+    // 切换到 Visio 模式后默认隐藏终端电脑A
+    wrapper.vm.onViewModeChange('classic-visio')
+    await flushPromises()
+    expect(wrapper.vm.showTerminals).toBe(false)
+    expect(wrapper.vm.graphData.nodes.map((n) => n.id)).not.toContain(3)
+    expect(wrapper.vm.graphData.nodes.map((n) => n.id)).toContain(2)
+    expect(wrapper.vm.graphData.nodes.map((n) => n.id)).toContain(4)
+
+    // 开启显示终端开关
+    wrapper.vm.showTerminals = true
+    await flushPromises()
+    expect(wrapper.vm.graphData.nodes.map((n) => n.id)).toContain(3)
+  })
+
+  it('修改 visioDeviceTypes 筛选时自动持久化到 localStorage', async () => {
+    wrapper = mount(TopologyView, {
+      global: {
+        stubs: {
+          ElSlider: true,
+          ElSwitch: true,
+          ElRadioGroup: true,
+          ElRadioButton: true,
+          ElButton: true,
+          ElSelect: true,
+          ElOption: true,
+          LldpDiscoveryModal: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    wrapper.vm.visioDeviceTypes = ['switch', 'router']
+    wrapper.vm.onVisioTypesChange()
+
+    const saved = localStorage.getItem('weaver_topology_visio_types')
+    expect(saved).toBe(JSON.stringify(['switch', 'router']))
+  })
 })

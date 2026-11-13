@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { treeToGraph, applyVisioHierarchicalLayout, clearVisioLayout } from '../treeToGraph'
+import {
+  treeToGraph,
+  applyVisioHierarchicalLayout,
+  clearVisioLayout,
+  DEFAULT_INFRASTRUCTURE_TYPES,
+  TERMINAL_TYPES,
+} from '../treeToGraph'
 
 const tree = [
   {
@@ -83,6 +89,77 @@ describe('treeToGraph', () => {
     const res = treeToGraph([])
     expect(res.nodes).toEqual([])
     expect(res.links).toEqual([])
+  })
+
+  it('支持 allowedTypes 过滤，排除终端时仅保留网络骨干设备并移除终端连线', () => {
+    const filterTree = [
+      {
+        id: 1,
+        name: '核心机房',
+        type: 'group',
+        children: [
+          {
+            id: 2,
+            name: '核心交换机',
+            type: 'switch',
+            children: [
+              { id: 3, name: '办公PC-1', type: 'terminal', children: [] },
+              { id: 4, name: '门禁摄像头', type: 'camera', children: [] },
+              { id: 5, name: '接入交换机-2', type: 'switch', children: [] },
+            ],
+          },
+        ],
+      },
+    ]
+
+    const { nodes, links } = treeToGraph(filterTree, {
+      allowedTypes: DEFAULT_INFRASTRUCTURE_TYPES,
+    })
+
+    const nodeIds = nodes.map((n) => n.id)
+    expect(nodeIds).toContain(1) // 机房分组保留
+    expect(nodeIds).toContain(2) // 核心交换机保留
+    expect(nodeIds).toContain(5) // 接入交换机保留
+    expect(nodeIds).not.toContain(3) // PC终端过滤
+    expect(nodeIds).not.toContain(4) // 摄像头过滤
+
+    // 连线检查
+    expect(links.find((l) => l.target === 3)).toBeUndefined()
+    expect(links.find((l) => l.target === 4)).toBeUndefined()
+    expect(links.find((l) => l.source === 2 && l.target === 5)).toBeTruthy()
+  })
+
+  it('过滤终端后自动裁剪无骨干设备的空分组，避免孤立分组节点', () => {
+    const filterTree = [
+      {
+        id: 1,
+        name: '机房A',
+        type: 'group',
+        children: [
+          { id: 2, name: '汇聚交换机', type: 'switch', children: [] },
+        ],
+      },
+      {
+        id: 10,
+        name: '财务科室（纯终端）',
+        type: 'group',
+        children: [
+          { id: 11, name: '财务电脑1', type: 'terminal', children: [] },
+          { id: 12, name: '财务打印机', type: 'printer', children: [] },
+        ],
+      },
+    ]
+
+    const { nodes } = treeToGraph(filterTree, {
+      allowedTypes: DEFAULT_INFRASTRUCTURE_TYPES,
+    })
+
+    const nodeIds = nodes.map((n) => n.id)
+    expect(nodeIds).toContain(1)
+    expect(nodeIds).toContain(2)
+    expect(nodeIds).not.toContain(10) // 纯终端分组被自动裁剪
+    expect(nodeIds).not.toContain(11)
+    expect(nodeIds).not.toContain(12)
   })
 
   it('识别核心交换机并将节点排布为以核心为中心的分层同心圆', () => {

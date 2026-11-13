@@ -14,12 +14,45 @@ export function findCoreSwitch(nodes) {
   return nodes[0].id
 }
 
-export function treeToGraph(tree) {
+export const DEFAULT_INFRASTRUCTURE_TYPES = [
+  'switch',
+  'unmanaged_switch',
+  'router',
+  'firewall',
+  'ap',
+  'server',
+  'nas',
+  'nvr',
+  'ups',
+]
+
+export const TERMINAL_TYPES = ['terminal', 'camera', 'printer']
+
+export function hasAllowedDescendant(item, allowedSet) {
+  if (!allowedSet) return true
+  if (item.type !== 'group' && allowedSet.has(item.type)) return true
+  if (!item.children || item.children.length === 0) return false
+  return item.children.some((child) => hasAllowedDescendant(child, allowedSet))
+}
+
+export function treeToGraph(tree, options = {}) {
+  const allowedSet = options.allowedTypes ? new Set(options.allowedTypes) : null
   const nodes = []
   const links = []
 
   function walk(items, parentId = null) {
-    for (const node of items) {
+    for (const node of items || []) {
+      if (node.type === 'group') {
+        if (allowedSet && !hasAllowedDescendant(node, allowedSet)) {
+          continue
+        }
+      } else if (allowedSet && !allowedSet.has(node.type)) {
+        if (node.children && node.children.length > 0) {
+          walk(node.children, parentId)
+        }
+        continue
+      }
+
       const childCount = node.children ? node.children.length : 0
       nodes.push({
         id: node.id,
