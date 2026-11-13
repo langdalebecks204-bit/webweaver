@@ -8,4 +8,5 @@ backend/.env
 .git
 .gitignore
 docs
+tools
 *.log

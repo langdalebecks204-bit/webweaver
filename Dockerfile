@@ -8,11 +8,13 @@ RUN npm run build
 
 # ---- runtime ----
 FROM python:3.12-slim
+ARG APP_VERSION=0.6.6
 ENV PYTHONUNBUFFERED=1 \
     WEAVER_DB_URL=sqlite:////data/weaver.db \
     WEAVER_UPLOAD_DIR=/data/uploads \
     WEAVER_ENABLE_SCHEDULER=true
 WORKDIR /app
+RUN echo "{\"version\": \"${APP_VERSION}\"}" > /app/version.json
 COPY --from=frontend-build /build/dist /app/frontend/dist
 COPY backend/app ./backend/app
 COPY backend/requirements.txt ./backend/
