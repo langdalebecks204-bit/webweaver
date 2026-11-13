@@ -403,3 +403,20 @@ describe('DeviceTree MAC地址编辑', () => {
   })
 })
 
+describe('DeviceTree 图标展示', () => {
+  it('渲染 VisioIcon 并携带节点设备类型', () => {
+    const node = {
+      id: 8,
+      name: '核心路由',
+      type: 'router',
+      status: 'online',
+      parent_id: null,
+    }
+    const wrapper = mountTree('edit', node)
+    const iconWrap = wrapper.find('.visio-icon-wrap')
+    expect(iconWrap.exists()).toBe(true)
+    expect(iconWrap.attributes('data-type')).toBe('router')
+  })
+})
+
+

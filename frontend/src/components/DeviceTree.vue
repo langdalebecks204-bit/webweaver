@@ -6,6 +6,7 @@ import { useSettingsStore } from '../stores/settings'
 import { allTypeOptions, typeIcon } from '../utils/deviceTypes'
 import { flattenTree } from '../stores/devicesHelpers'
 import PortBindingDialog from './PortBindingDialog.vue'
+import VisioIcon from './VisioIcon.vue'
 
 const props = defineProps({ node: { type: Object, required: true } })
 const emit = defineEmits(['open-history', 'open-detail', 'open-snmp'])
@@ -212,9 +213,7 @@ onMounted(() => {
 <template>
   <el-dropdown trigger="contextmenu" @command="onCommand">
     <div class="node" :class="props.node.status">
-      <el-icon class="type-icon">
-        <component :is="typeIcon(props.node.type, settingsStore.customTypes)" />
-      </el-icon>
+      <VisioIcon :type="props.node.type" :size="16" class="type-icon" />
       <span class="status-dot" :class="props.node.status" />
       <span class="node-id">#{{ props.node.id }}</span>
       <span class="node-name">{{ props.node.name }}</span>
