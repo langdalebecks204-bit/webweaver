@@ -29,6 +29,13 @@ backend/.venv/
 frontend/node_modules/
 frontend/dist/
 
+# Build & Binary artifacts
+build/
+dist/
+*.exe
+
+
+
 # Uploads & Backups
 uploads/
 backend/uploads/
