@@ -3,9 +3,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ForceGraph from 'force-graph'
 import { useDevicesStore } from '../stores/devices'
 import { typeGlyph } from '../utils/deviceTypes'
-import { treeToGraph } from '../utils/treeToGraph'
+import { treeToGraph, applyVisioHierarchicalLayout } from '../utils/treeToGraph'
 import { getDeviceSnmpInterfaces } from '../api/devices'
 import { SPEED_COLORS, getLinkColor } from '../utils/topologyLinks'
+import { getVisioCanvasImage, preloadAllVisioCanvasImages } from '../utils/visioIcons'
 import LldpDiscoveryModal from './LldpDiscoveryModal.vue'
 
 const store = useDevicesStore()
@@ -20,6 +21,9 @@ const lldpModalVisible = ref(false)
 const isFullscreen = ref(false)
 const snmpSpeedMap = ref(new Map())
 const isSnmpLoading = ref(false)
+const viewMode = ref(
+  (typeof localStorage !== 'undefined' && localStorage.getItem('weaver_topology_view_mode')) || 'dark-neon'
+)
 
 const emit = defineEmits(['back-home'])
 
@@ -127,6 +131,99 @@ function drawNode(node, ctx) {
   }
 }
 
+function drawVisioNode(node, ctx) {
+  const iconSize = 44
+  const half = iconSize / 2
+  const img = getVisioCanvasImage(node.type)
+  if (img && img.src) {
+    try {
+      ctx.drawImage(img, node.x - half, node.y - half, iconSize, iconSize)
+    } catch (e) {
+      ctx.fillStyle = '#64748b'
+      ctx.fillRect(node.x - half, node.y - half, iconSize, iconSize)
+    }
+  } else {
+    ctx.fillStyle = '#64748b'
+    ctx.fillRect(node.x - half, node.y - half, iconSize, iconSize)
+  }
+
+  // Top-right LED indicator
+  const ledX = node.x + half - 4
+  const ledY = node.y - half + 4
+  const color = STATUS_COLORS[node.status] || '#94a3b8'
+  const now = Date.now()
+  let alpha = 1
+  if (node.status === 'offline') {
+    alpha = 0.4 + 0.6 * Math.abs(Math.sin(now / 500))
+  }
+  ctx.save()
+  ctx.globalAlpha = alpha
+  ctx.beginPath()
+  ctx.arc(ledX, ledY, 4.5, 0, 2 * Math.PI)
+  ctx.fillStyle = color
+  ctx.fill()
+  ctx.lineWidth = 1.2
+  ctx.strokeStyle = '#ffffff'
+  ctx.stroke()
+  ctx.restore()
+
+  // Labels below
+  if (showLabels.value || node.id === hoverNodeId.value) {
+    ctx.save()
+    ctx.font = `bold ${labelFontSize.value}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillStyle = '#1e293b'
+    ctx.fillText(node.name, node.x, node.y + half + 4)
+
+    if (node.ip_address) {
+      ctx.font = `${Math.max(8, labelFontSize.value - 2)}px monospace`
+      ctx.fillStyle = '#64748b'
+      ctx.fillText(node.ip_address, node.x, node.y + half + 6 + labelFontSize.value)
+    }
+    ctx.restore()
+  }
+}
+
+function nodeCanvasRenderer(node, ctx) {
+  if (viewMode.value === 'classic-visio') {
+    drawVisioNode(node, ctx)
+  } else {
+    drawNode(node, ctx)
+  }
+}
+
+function getLinkStrokeColor(link) {
+  if (link.status === 'offline') return '#ef4444'
+  if (viewMode.value === 'classic-visio') {
+    return '#94a3b8'
+  }
+  return getLinkColor(link, snmpSpeedMap.value)
+}
+
+function getParticleCount(link) {
+  if (viewMode.value === 'classic-visio') return 0
+  return particleCount(link)
+}
+
+function onViewModeChange(mode) {
+  viewMode.value = mode
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('weaver_topology_view_mode', mode)
+  }
+  if (!fg) return
+  if (mode === 'classic-visio') {
+    fg.backgroundColor('#f8fafc')
+    applyVisioHierarchicalLayout(graphData.value.nodes, graphData.value.links)
+  } else {
+    fg.backgroundColor('#0f172a')
+    const fresh = treeToGraph(store.tree)
+    graphData.value.nodes = fresh.nodes
+  }
+  syncGraphData()
+  fg.zoomToFit?.(400, 30)
+}
+
 let snmpDebounceTimer = null
 
 async function fetchSnmpLinkSpeeds() {
@@ -221,16 +318,20 @@ function drawLinkPortLabels(link, ctx) {
 
 function renderGraph() {
   if (!graphEl.value || !graphData.value.nodes.length) return
+  const bg = viewMode.value === 'classic-visio' ? '#f8fafc' : '#0f172a'
+  if (viewMode.value === 'classic-visio') {
+    applyVisioHierarchicalLayout(graphData.value.nodes, graphData.value.links)
+  }
   fg = new ForceGraph(graphEl.value)
-    .backgroundColor('#0f172a')
+    .backgroundColor(bg)
     .graphData(graphData.value)
     .nodeRelSize(1)
     .nodeCanvasObjectMode(() => 'replace')
-    .nodeCanvasObject(drawNode)
+    .nodeCanvasObject(nodeCanvasRenderer)
     .linkCanvasObjectMode(() => 'after')
     .linkCanvasObject(drawLinkPortLabels)
-    .linkColor((link) => getLinkColor(link, snmpSpeedMap.value))
-    .linkDirectionalParticles(particleCount)
+    .linkColor(getLinkStrokeColor)
+    .linkDirectionalParticles(getParticleCount)
     .linkDirectionalParticleSpeed(particleSpeed)
     .linkDirectionalParticleWidth(2)
     .linkDirectionalParticleColor(particleColor)
@@ -291,6 +392,10 @@ watch(
 )
 
 onMounted(async () => {
+  preloadAllVisioCanvasImages()
+  if (viewMode.value === 'classic-visio' && graphData.value.nodes.length) {
+    applyVisioHierarchicalLayout(graphData.value.nodes, graphData.value.links)
+  }
   document.addEventListener('fullscreenchange', onFsChange)
   await nextTick()
   try {
@@ -319,10 +424,15 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="wrapEl" class="topology-wrap" :class="{ fullscreen: isFullscreen }">
+  <div ref="wrapEl" class="topology-wrap" :class="{ fullscreen: isFullscreen, 'classic-visio': viewMode === 'classic-visio' }">
     <div v-if="error" class="error">{{ error }}</div>
     <template v-else-if="graphData.nodes.length">
       <div class="topo-toolbar">
+        <el-radio-group v-model="viewMode" size="small" class="mode-switcher" @change="onViewModeChange">
+          <el-radio-button value="dark-neon">🌌 暗黑霓虹</el-radio-button>
+          <el-radio-button value="classic-visio">📐 经典 Visio</el-radio-button>
+        </el-radio-group>
+
         <span class="label">字号</span>
         <el-slider
           v-model="labelFontSize"
@@ -395,6 +505,33 @@ onBeforeUnmount(() => {
 .topology-wrap:fullscreen {
   height: 100vh;
   border-radius: 0;
+}
+.topology-wrap.classic-visio {
+  background: #f8fafc;
+}
+.topology-wrap.classic-visio .topo-toolbar {
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  color: #475569;
+}
+.topology-wrap.classic-visio .topo-toolbar .label {
+  color: #334155;
+}
+.topology-wrap.classic-visio .legend-group {
+  color: #475569;
+}
+.topology-wrap.classic-visio .back-home {
+  color: #64748b;
+}
+.topology-wrap.classic-visio .back-home:hover {
+  color: #0f172a;
+}
+.topology-wrap.classic-visio .graph {
+  background-color: #f8fafc;
+  background-image: 
+    linear-gradient(#e2e8f0 1px, transparent 1px),
+    linear-gradient(90deg, #e2e8f0 1px, transparent 1px);
+  background-size: 25px 25px;
 }
 .back-home {
   margin-left: auto;

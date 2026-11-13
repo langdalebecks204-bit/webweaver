@@ -361,4 +361,35 @@ describe('TopologyView', () => {
     await flushPromises()
     expect(wrapper.find('.lldp-modal-stub').exists()).toBe(true)
   })
+
+  it('支持在暗黑霓虹与经典 Visio 模式之间切换', async () => {
+    localStorage.removeItem('weaver_topology_view_mode')
+    wrapper = mount(TopologyView, {
+      global: {
+        stubs: {
+          ElSlider: true,
+          ElSwitch: true,
+          ElRadioGroup: {
+            props: ['modelValue'],
+            emits: ['update:modelValue', 'change'],
+            template: '<div class="radio-group-stub"><slot /></div>',
+          },
+          ElRadioButton: {
+            props: ['value'],
+            template: '<button class="mode-btn" @click="$parent.$emit(\'change\', value)"><slot /></button>',
+          },
+          ElButton: true,
+          LldpDiscoveryModal: true,
+        },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.vm.viewMode).toBe('dark-neon')
+
+    wrapper.vm.onViewModeChange('classic-visio')
+    await flushPromises()
+    expect(wrapper.vm.viewMode).toBe('classic-visio')
+    expect(localStorage.getItem('weaver_topology_view_mode')).toBe('classic-visio')
+    expect(fgMock.backgroundColor).toHaveBeenCalledWith('#f8fafc')
+  })
 })
