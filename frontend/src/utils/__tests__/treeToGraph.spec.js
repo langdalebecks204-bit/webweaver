@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { treeToGraph } from '../treeToGraph'
+import { treeToGraph, applyVisioHierarchicalLayout, clearVisioLayout } from '../treeToGraph'
 
 const tree = [
   {
@@ -141,5 +141,31 @@ describe('treeToGraph', () => {
     expect(pc.layer).toBe(2)
     const r2 = Math.round(Math.hypot(pc.fx, pc.fy))
     expect(r2).toBe(420)
+  })
+
+  describe('applyVisioHierarchicalLayout', () => {
+    it('按自顶向下树深度分配坐标，子节点 fy > 父节点 fy', () => {
+      const { nodes, links } = treeToGraph(tree)
+      applyVisioHierarchicalLayout(nodes, links)
+
+      const root = nodes.find((n) => n.id === 1)
+      const child1 = nodes.find((n) => n.id === 2)
+      const child2 = nodes.find((n) => n.id === 3)
+
+      expect(root.fy).toBeLessThan(child1.fy)
+      expect(root.fy).toBeLessThan(child2.fy)
+      expect(child1.fy).toBe(child2.fy)
+      expect(child1.fx).not.toBe(child2.fx)
+    })
+
+    it('clearVisioLayout 清理后重置 fx, fy 允许力导向接管', () => {
+      const { nodes, links } = treeToGraph(tree)
+      applyVisioHierarchicalLayout(nodes, links)
+      clearVisioLayout(nodes)
+      nodes.forEach((n) => {
+        expect(n.fx).toBeUndefined()
+        expect(n.fy).toBeUndefined()
+      })
+    })
   })
 })

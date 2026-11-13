@@ -199,3 +199,159 @@ export function treeToGraph(tree) {
 
   return { nodes, links, coreNodeId }
 }
+
+/**
+ * Top-Down Hierarchical layout for Classic Visio mode.
+ * Assigns static fx and fy based on tree depth and subtree bounds.
+ */
+export function applyVisioHierarchicalLayout(nodes, links) {
+  if (!nodes || nodes.length === 0) return
+
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]))
+  const childrenMap = new Map(nodes.map((n) => [n.id, []]))
+  const parentMap = new Map()
+
+  function getNodeId(endpoint) {
+    if (typeof endpoint === 'object' && endpoint !== null) return endpoint.id
+    return endpoint
+  }
+
+  for (const l of links || []) {
+    const s = getNodeId(l.source)
+    const t = getNodeId(l.target)
+    if (nodeMap.has(s) && nodeMap.has(t) && s !== t) {
+      if (!parentMap.has(t)) {
+        parentMap.set(t, s)
+        childrenMap.get(s).push(t)
+      }
+    }
+  }
+
+  // Identify root nodes (nodes without parent in links)
+  let roots = nodes.filter((n) => !parentMap.has(n.id)).map((n) => n.id)
+  if (roots.length === 0 && nodes.length > 0) {
+    roots = [nodes[0].id]
+  }
+
+  const depthMap = new Map()
+  const visited = new Set()
+
+  // BFS to assign depths
+  const queue = []
+  for (const rId of roots) {
+    depthMap.set(rId, 0)
+    visited.add(rId)
+    queue.push(rId)
+  }
+
+  while (queue.length > 0) {
+    const currId = queue.shift()
+    const d = depthMap.get(currId) || 0
+    const children = childrenMap.get(currId) || []
+    for (const cId of children) {
+      if (!visited.has(cId)) {
+        visited.add(cId)
+        depthMap.set(cId, d + 1)
+        queue.push(cId)
+      }
+    }
+  }
+
+  // Handle any remaining unvisited nodes
+  for (const n of nodes) {
+    if (!visited.has(n.id)) {
+      depthMap.set(n.id, 1)
+      visited.add(n.id)
+      roots.push(n.id)
+    }
+  }
+
+  // Calculate subtree widths
+  const widthMap = new Map()
+  const NODE_MIN_WIDTH = 130
+
+  function calcSubtreeWidth(id) {
+    const children = childrenMap.get(id) || []
+    if (children.length === 0) {
+      widthMap.set(id, NODE_MIN_WIDTH)
+      return NODE_MIN_WIDTH
+    }
+    let total = 0
+    for (const cId of children) {
+      total += calcSubtreeWidth(cId)
+    }
+    const w = Math.max(NODE_MIN_WIDTH, total)
+    widthMap.set(id, w)
+    return w
+  }
+
+  roots.forEach((rId) => calcSubtreeWidth(rId))
+
+  // Assign X and Y
+  const LEVEL_HEIGHT = 150
+  const xMap = new Map()
+
+  function assignPositions(id, left, right) {
+    const x = (left + right) / 2
+    xMap.set(id, x)
+
+    const children = childrenMap.get(id) || []
+    if (children.length === 0) return
+
+    let curLeft = left
+    const totalChildWidth = children.reduce((sum, cId) => sum + (widthMap.get(cId) || NODE_MIN_WIDTH), 0)
+    // If allocated width is larger than totalChildWidth, center children within allocated space
+    if (right - left > totalChildWidth) {
+      curLeft = left + (right - left - totalChildWidth) / 2
+    }
+
+    for (const cId of children) {
+      const cWidth = widthMap.get(cId) || NODE_MIN_WIDTH
+      assignPositions(cId, curLeft, curLeft + cWidth)
+      curLeft += cWidth
+    }
+  }
+
+  let rootLeft = 0
+  for (const rId of roots) {
+    const rWidth = widthMap.get(rId) || NODE_MIN_WIDTH
+    assignPositions(rId, rootLeft, rootLeft + rWidth)
+    rootLeft += rWidth + 40
+  }
+
+  // Center around 0
+  let minX = Infinity
+  let maxX = -Infinity
+  for (const x of xMap.values()) {
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+  }
+  const centerX = (minX + maxX) / 2
+
+  for (const n of nodes) {
+    const d = depthMap.get(n.id) || 0
+    const rawX = xMap.get(n.id) ?? 0
+    const finalX = Math.round(rawX - centerX)
+    const finalY = d * LEVEL_HEIGHT + 60
+
+    n.visioX = finalX
+    n.visioY = finalY
+    n.visioDepth = d
+
+    n.x = finalX
+    n.y = finalY
+    n.fx = finalX
+    n.fy = finalY
+  }
+}
+
+/**
+ * Clears rigid Visio layout coordinates so force-directed animation can resume.
+ */
+export function clearVisioLayout(nodes) {
+  if (!nodes) return
+  for (const n of nodes) {
+    delete n.fx
+    delete n.fy
+  }
+}
