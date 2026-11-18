@@ -38,8 +38,15 @@ app.include_router(assets.router, prefix="/api/assets", tags=["assets"])
 app.include_router(topology.router, prefix="/api/topology", tags=["topology"])
 app.include_router(system.router, prefix="/api/system", tags=["system"])
 
+class NoCacheStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        resp = await super().get_response(path, scope)
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+
 os.makedirs(settings.upload_dir, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
+app.mount("/uploads", NoCacheStaticFiles(directory=settings.upload_dir), name="uploads")
 
 
 @app.get("/api/health")

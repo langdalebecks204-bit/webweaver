@@ -299,6 +299,13 @@ function onPortBindingsSave(bindings) {
   deviceForm.value.port_bindings = bindings
 }
 
+function onDetailUpdated(updatedDevice) {
+  if (updatedDevice && detailDevice.value && updatedDevice.id === detailDevice.value.id) {
+    detailDevice.value = { ...detailDevice.value, ...updatedDevice }
+  }
+  store.load()
+}
+
 async function onSaveDevice() {
   if (deviceSubmitting.value) return
   deviceSubmitting.value = true
@@ -508,7 +515,7 @@ async function onSaveDevice() {
         v-if="detailDevice"
         :device="detailDevice"
         @close="detailDevice = null"
-        @updated="store.load()"
+        @updated="onDetailUpdated"
       />
 
       <SwitchPortsModal

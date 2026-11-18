@@ -180,7 +180,8 @@ def test_delete_image_requires_admin(client, admin_headers):
 def _upload_path(image_url: str) -> str:
     from app.config import settings
 
-    return os.path.join(settings.upload_dir, os.path.basename(image_url))
+    clean_url = image_url.split("?", 1)[0]
+    return os.path.join(settings.upload_dir, os.path.basename(clean_url))
 
 
 def _make_jpeg_with_orientation(width=4032, height=3024, orientation=6) -> bytes:
@@ -239,3 +240,27 @@ def test_upload_exif_jpeg_succeeds_and_keeps_orientation(client, admin_headers):
     saved = Image.open(path)
     assert saved.getexif().get(0x0112) == 6
     assert os.path.getsize(path) <= 300 * 1024
+
+
+def test_reupload_changes_image_url_and_sets_no_cache(client, admin_headers):
+    import time
+
+    created = client.post("/api/devices", headers=admin_headers,
+                          json={"name": "S1", "type": "switch"})
+    cid = created.json()["id"]
+
+    r1 = _upload(client, cid, admin_headers, _make_png(100, 100, (10, 20, 30)))
+    assert r1.status_code == 200
+    url1 = r1.json()["image_url"]
+    assert "?v=" in url1
+
+    time.sleep(0.01)
+    r2 = _upload(client, cid, admin_headers, _make_png(100, 100, (40, 50, 60)))
+    assert r2.status_code == 200
+    url2 = r2.json()["image_url"]
+    assert "?v=" in url2
+    assert url1 != url2
+
+    res = client.get(url2)
+    assert res.status_code == 200
+    assert res.headers.get("cache-control") == "no-cache"

@@ -2,6 +2,7 @@ import io
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
@@ -189,7 +190,7 @@ def upload_image(device_id: int, file: UploadFile) -> str:
     os.makedirs(settings.upload_dir, exist_ok=True)
     filename = f"{device_id}.jpg"
     Path(settings.upload_dir, filename).write_bytes(processed)
-    return f"/uploads/{filename}"
+    return f"/uploads/{filename}?v={int(time.time() * 1000)}"
 
 
 def delete_image_file(device_id: int) -> None:
